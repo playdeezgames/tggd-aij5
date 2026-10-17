@@ -10,6 +10,7 @@ EXTRA_CARRY_COST :: 1 // carrying both an item and a grudge costs this much more
 EVENTS_PER_GENERATION :: 3
 MAX_GENERATIONS :: 8
 HEIR_CHOICES :: 3
+LEGACY_MAX :: 5 // past dynasties remembered; older ones are forgotten
 
 Counter :: enum {
 	Flame,
@@ -92,6 +93,13 @@ Over_Reason :: enum {
 	Dynasty_End,
 }
 
+// What the current event is: a normal one from EVENTS, or a relative bringing back something a past dynasty left.
+Legacy_Kind :: enum {
+	Normal,
+	Grudge,
+	Item,
+}
+
 Screen :: enum {
 	Title,
 	Event,
@@ -107,6 +115,25 @@ Screen :: enum {
 Held :: struct {
 	present: bool,
 	stage:   int,
+}
+
+// What a finished dynasty left: the oldest item and the oldest grudge it still held. Records age as newer
+// dynasties are added, so what is remembered drifts across runs the same way it drifts across handoffs.
+Legacy_Record :: struct {
+	has_item:     bool,
+	item:         Item_Id,
+	item_stage:   int,
+	has_grudge:   bool,
+	grudge:       Grudge_Id,
+	grudge_stage: int,
+	generations:  int,
+	survived:     bool, // the torch was still lit at the end
+}
+
+// Newest first.
+Legacy :: struct {
+	records: [LEGACY_MAX]Legacy_Record,
+	count:   int,
 }
 
 // A flat value type: no pointers, no heap. Copy it to snapshot a run.
@@ -129,6 +156,10 @@ Game :: struct {
 	heir:          Heir_Id,
 	over:          Over_Reason,
 	rng:           u64,
+	legacy:        Legacy, // survives start_run; the platform loads and saves it separately from the run
+	event_kind:    Legacy_Kind,
+	legacy_pick:   int, // which record the current Legacy event is about
+	legacy_used:   bit_set[0 ..< LEGACY_MAX], // records already brought up this run
 }
 
 new_game :: proc(seed: u64) -> Game {
@@ -171,6 +202,9 @@ start_run :: proc(g: ^Game) {
 	g.carry_item = nil
 	g.carry_grudge = nil
 	g.events_seen = {}
+	g.candidates = {.Brindle, .Odo, .Pim} // distinct from the start, so a save is valid before the first Heir screen
+	g.legacy_used = {}
+	g.event_kind = .Normal
 	begin_generation(g)
 }
 
@@ -180,6 +214,12 @@ begin_generation :: proc(g: ^Game) {
 }
 
 begin_event :: proc(g: ^Game) {
+	// From the second generation on, a relative may turn up with something from a past dynasty. It takes the
+	// place of the generation's first event, so a generation is still EVENTS_PER_GENERATION events long.
+	if g.events_left == EVENTS_PER_GENERATION && g.generation >= 2 && try_legacy_event(g) {
+		return
+	}
+	g.event_kind = .Normal
 	unseen: [len(Event_Id)]Event_Id
 	n := 0
 	for e in Event_Id {
@@ -229,6 +269,10 @@ available_options :: proc(g: Game, out: ^[3]int) -> int {
 
 // `index` is an index into the event's options, as given by available_options.
 choose_option :: proc(g: ^Game, index: int) {
+	if g.event_kind != .Normal {
+		choose_legacy_option(g, index)
+		return
+	}
 	option := EVENTS[g.event].options[index]
 	apply_delta(g, option.delta)
 	// Getting something you already hold keeps its age: it does not make it new again.
@@ -295,6 +339,7 @@ after_item_step :: proc(g: ^Game) {
 end_run :: proc(g: ^Game, reason: Over_Reason) {
 	g.over = reason
 	g.screen = .Over
+	remember(g)
 }
 
 carry_cost :: proc(g: Game) -> int {
@@ -324,11 +369,11 @@ finish_handover :: proc(g: ^Game) {
 	g.items = {}
 	g.grudges = {}
 	if item, ok := g.carry_item.?; ok {
-		g.items[item] = Held{true, g.left_items[item].stage + 1}
+		g.items[item] = Held{true, min(g.left_items[item].stage + 1, DRIFT_STEPS - 1)}
 		g.left_items[item].present = false
 	}
 	if grudge, ok := g.carry_grudge.?; ok {
-		g.grudges[grudge] = Held{true, g.left_grudges[grudge].stage + 1}
+		g.grudges[grudge] = Held{true, min(g.left_grudges[grudge].stage + 1, DRIFT_STEPS - 1)}
 		g.left_grudges[grudge].present = false
 	}
 	g.screen = .Handoff

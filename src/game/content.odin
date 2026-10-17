@@ -658,3 +658,19 @@ EVENTS := [Event_Id]Event {
 		},
 	},
 }
+
+// Options for the visits from relatives. Option 0 takes the old thing back (see choose_legacy_option). The prompts
+// are built from the record in screens.odin.
+LEGACY_OPTIONS := [Legacy_Kind][3]Option {
+	.Normal = {},
+	.Grudge = {
+		{text = "Take up the grudge.", result = "It fits like it was always yours.", delta = #partial {.Pride = 1, .Reputation = -1}},
+		{text = "Ask what it was about.", result = "Nobody knows. It is a pleasant evening.", delta = #partial {.Snacks = 1}},
+		{text = "Change the subject.", result = "You change it to goats. It works.", delta = #partial {.Flame = 1, .Reputation = -1}},
+	},
+	.Item = {
+		{text = "Take it.", result = "It has been waiting. It is not sentimental about it.", delta = #partial {.Reputation = 1, .Pride = -1}},
+		{text = "Sell it.", result = "It fetches more than it should.", delta = #partial {.Snacks = 2, .Pride = -1}},
+		{text = "Hold it to the torch.", result = "The torch is interested. The item is less so.", delta = #partial {.Flame = 1, .Livestock = -1}},
+	},
+}

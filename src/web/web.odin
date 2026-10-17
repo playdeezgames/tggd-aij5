@@ -14,9 +14,61 @@ foreign host {
 	dom_choice :: proc(text: [^]u8, length: i32) ---
 	// Milliseconds since the epoch, as f64 (an i64 import would need a BigInt on the JS side).
 	now_ms :: proc() -> f64 ---
+	// localStorage. storage_get returns the value's byte length, or -1 when the key is missing, unreadable or
+	// longer than cap.
+	storage_get :: proc(key: [^]u8, key_len: i32, buf: [^]u8, cap: i32) -> i32 ---
+	storage_set :: proc(key: [^]u8, key_len: i32, val: [^]u8, val_len: i32) ---
+	storage_remove :: proc(key: [^]u8, key_len: i32) ---
 }
 
+RUN_KEY :: "ptt-run"
+LEGACY_KEY :: "ptt-legacy"
+
 state: game.Game
+save_buf: [4096]u8
+
+load_text :: proc(key: string) -> (text: string, ok: bool) {
+	n := storage_get(raw_data(key), i32(len(key)), raw_data(save_buf[:]), i32(len(save_buf)))
+	if n < 0 {
+		return "", false
+	}
+	return string(save_buf[:n]), true
+}
+
+store_text :: proc(key: string, text: string) {
+	storage_set(raw_data(key), i32(len(key)), raw_data(text), i32(len(text)))
+}
+
+drop_key :: proc(key: string) {
+	storage_remove(raw_data(key), i32(len(key)))
+}
+
+// A run in progress is saved after every event; a finished run or the title has nothing to resume. The legacy
+// is small, so it is written every time.
+save_all :: proc() {
+	if state.screen == .Title || state.screen == .Over {
+		drop_key(RUN_KEY)
+	} else {
+		store_text(RUN_KEY, game.serialize_game(state))
+	}
+	store_text(LEGACY_KEY, game.serialize_legacy(state.legacy))
+}
+
+// Boot at the title, then try the saves: a valid saved run goes straight back to play. A save that does not
+// validate is ignored and left alone.
+load_saves :: proc() {
+	state = game.new_game(u64(now_ms()))
+	if text, ok := load_text(LEGACY_KEY); ok {
+		if legacy, valid := game.parse_legacy(text); valid {
+			state.legacy = legacy
+		}
+	}
+	if text, ok := load_text(RUN_KEY); ok {
+		if saved, valid := game.parse_game(text, state.legacy); valid {
+			state = saved
+		}
+	}
+}
 
 redraw :: proc() {
 	v := game.make_view(state)
@@ -33,7 +85,7 @@ redraw :: proc() {
 }
 
 main :: proc() {
-	state = game.new_game(u64(now_ms()))
+	load_saves()
 	redraw()
 }
 
@@ -47,5 +99,6 @@ step :: proc(dt: f64, c: runtime.Context) -> bool {
 on_choice :: proc "c" (index: i32) {
 	context = runtime.default_context()
 	game.choose(&state, int(index))
+	save_all()
 	redraw()
 }

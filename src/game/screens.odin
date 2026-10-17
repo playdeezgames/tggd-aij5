@@ -103,13 +103,43 @@ held_grudges :: proc(grudges: [Grudge_Id]Held, out: ^[len(Grudge_Id)]Grudge_Id) 
 	return n
 }
 
+current_option :: proc(g: Game) -> Option {
+	if g.event_kind != .Normal {
+		return LEGACY_OPTIONS[g.event_kind][g.last_option]
+	}
+	return EVENTS[g.event].options[g.last_option]
+}
+
+// "Lasted 5 generations: a family goat map; an old grudge against goats, though nobody remembers why"
+legacy_line :: proc(rec: Legacy_Record) -> string {
+	items: [Item_Id]Held
+	grudges: [Grudge_Id]Held
+	if rec.has_item {
+		items[rec.item] = Held{true, rec.item_stage}
+	}
+	if rec.has_grudge {
+		grudges[rec.grudge] = Held{true, rec.grudge_stage}
+	}
+	how := "Reached the end" if rec.survived else fmt.tprintf("Lasted %d generations", rec.generations)
+	return fmt.tprintf("%s: %s.", how, holdings_text(items, grudges))
+}
+
 make_view :: proc(g: Game) -> View {
 	v: View
 	switch g.screen {
 	case .Title:
 		add_line(&v, "PASS THE TORCH")
 		add_line(&v, "You have a torch. It does not stay yours.")
+		if g.legacy.count > 0 {
+			add_line(&v, "Remembered from past dynasties:")
+			for i in 0 ..< g.legacy.count {
+				add_line(&v, legacy_line(g.legacy.records[i]))
+			}
+		}
 		add_choice(&v, "Begin")
+		if g.legacy.count > 0 {
+			add_choice(&v, "Forget the past")
+		}
 	case .Event:
 		add_line(&v, status_line(g))
 		if g.events_left == EVENTS_PER_GENERATION {
@@ -120,18 +150,38 @@ make_view :: proc(g: Game) -> View {
 				add_line(&v, fmt.tprintf("%s, %s, holds the torch now.", heir.name, heir.trait))
 			}
 		}
-		event := EVENTS[g.event]
-		add_line(&v, event.prompt)
-		open: [3]int
-		n := available_options(g, &open)
-		for i in 0 ..< n {
-			add_choice(&v, event.options[open[i]].text)
+		if g.event_kind != .Normal {
+			rec := g.legacy.records[g.legacy_pick]
+			if g.event_kind == .Item {
+				add_line(&v, fmt.tprintf("A relative you have not met returns with %s.", item_text(rec.item, rec.item_stage)))
+			} else {
+				add_line(&v, fmt.tprintf("A relative you have not met brings up %s.", grudge_text(rec.grudge, rec.grudge_stage)))
+			}
+			for option in LEGACY_OPTIONS[g.event_kind] {
+				add_choice(&v, option.text)
+			}
+		} else {
+			event := EVENTS[g.event]
+			add_line(&v, event.prompt)
+			open: [3]int
+			n := available_options(g, &open)
+			for i in 0 ..< n {
+				add_choice(&v, event.options[open[i]].text)
+			}
 		}
 	case .Result:
-		option := EVENTS[g.event].options[g.last_option]
+		option := current_option(g)
 		add_line(&v, status_line(g))
 		add_line(&v, option.result)
 		add_line(&v, delta_summary(option.delta))
+		if g.event_kind != .Normal && g.last_option == 0 {
+			rec := g.legacy.records[g.legacy_pick]
+			if g.event_kind == .Item {
+				add_line(&v, fmt.tprintf("You now hold %s.", item_text(rec.item, g.items[rec.item].stage)))
+			} else {
+				add_line(&v, fmt.tprintf("You now hold %s.", grudge_text(rec.grudge, g.grudges[rec.grudge].stage)))
+			}
+		}
 		if item, ok := option.item.?; ok {
 			add_line(&v, fmt.tprintf("You now hold %s.", item_text(item, g.items[item].stage)))
 		}
@@ -189,6 +239,9 @@ make_view :: proc(g: Game) -> View {
 			add_line(&v, "The torch is still lit. Nobody remembers who lit it.")
 		}
 		add_line(&v, fmt.tprintf("What survived: %s.", holdings_text(g.items, g.grudges)))
+		if any_held(g.items) || any_held(g.grudges) {
+			add_line(&v, "Word of it will reach the next dynasty.")
+		}
 		add_choice(&v, "Begin again")
 	}
 	return v
@@ -201,12 +254,22 @@ choose :: proc(g: ^Game, index: int) {
 		return
 	}
 	switch g.screen {
-	case .Title, .Over:
+	case .Title:
+		if index == 1 { 	// "Forget the past" exists only while there is a past
+			g.legacy = {}
+		} else {
+			start_run(g)
+		}
+	case .Over:
 		start_run(g)
 	case .Event:
-		open: [3]int
-		_ = available_options(g^, &open)
-		choose_option(g, open[index])
+		if g.event_kind != .Normal {
+			choose_option(g, index)
+		} else {
+			open: [3]int
+			_ = available_options(g^, &open)
+			choose_option(g, open[index])
+		}
 	case .Result:
 		finish_result(g)
 	case .Heir:

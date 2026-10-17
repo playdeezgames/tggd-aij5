@@ -38,6 +38,23 @@
 				if (index === 0) b.focus();
 			},
 			now_ms: () => Date.now(),
+			// localStorage can be missing or throw (private windows, blocked site data): the game still plays.
+			storage_get: (kp, kl, bp, cap) => {
+				try {
+					const v = localStorage.getItem(memory.loadString(kp, kl));
+					if (v === null) return -1;
+					const bytes = new TextEncoder().encode(v);
+					if (bytes.length > cap) return -1;
+					new Uint8Array(memory.memory.buffer, bp, bytes.length).set(bytes);
+					return bytes.length;
+				} catch (e) { return -1; }
+			},
+			storage_set: (kp, kl, vp, vl) => {
+				try { localStorage.setItem(memory.loadString(kp, kl), memory.loadString(vp, vl)); } catch (e) {}
+			},
+			storage_remove: (kp, kl) => {
+				try { localStorage.removeItem(memory.loadString(kp, kl)); } catch (e) {}
+			},
 		},
 	};
 	// Number keys pick a choice, so the game plays from the keyboard.
