@@ -23,17 +23,53 @@ Heir :: struct {
 	minus: Counter,
 }
 
-ITEM_NAMES := [Item_Id]string {
-	.Goat_Chewed_Map = "a goat-chewed map",
-	.Soggy_Hat       = "a soggy hat",
-	.Ladle           = "a ladle",
+// Drift vocabulary. An item's words come from two ladders: a shared status ladder (one rung per handoff, so the
+// text changes every time) and its own noun ladder (one rung per two handoffs). Grudges work the same way, with an
+// intensity ladder and a target ladder, and they lose their reason at REASON_LOST_STAGE.
+DRIFT_STEPS :: MAX_GENERATIONS // rungs in the shared ladders: a handoff never lands on the same words
+NOUN_RUNGS :: 4
+REASON_LOST_STAGE :: 2
+
+STATUS_LADDER := [DRIFT_STEPS]string {
+	"a",
+	"a handy",
+	"a favorite",
+	"a family",
+	"a cherished",
+	"a sacred",
+	"a forbidden",
+	"an unspeakable",
 }
 
-GRUDGE_NAMES := [Grudge_Id]string {
-	.Goat      = "the goat",
-	.Stranger  = "the stranger",
-	.Neighbors = "the neighbors",
-	.Sky       = "the sky",
+INTENSITY_LADDER := [DRIFT_STEPS]string {
+	"a grudge",
+	"a lasting grudge",
+	"an old grudge",
+	"a family grudge",
+	"an ancestral feud",
+	"a sacred feud",
+	"a blood feud",
+	"an unspeakable feud",
+}
+
+ITEM_NOUNS := [Item_Id][NOUN_RUNGS]string {
+	.Goat_Chewed_Map = {"goat-chewed map", "map of the goat", "goat map", "goat"},
+	.Soggy_Hat       = {"soggy hat", "damp hat", "hat", "head"},
+	.Ladle           = {"ladle", "big spoon", "spoon", "stirring"},
+}
+
+GRUDGE_TARGETS := [Grudge_Id][NOUN_RUNGS]string {
+	.Goat      = {"the goat", "goats", "the herd", "everyone with hooves"},
+	.Stranger  = {"the stranger", "strangers", "anyone with a torch", "torches"},
+	.Neighbors = {"the neighbors", "the people next door", "the house next door", "the fence"},
+	.Sky       = {"the sky", "the weather", "up", "ceilings"},
+}
+
+GRUDGE_REASONS := [Grudge_Id]string {
+	.Goat      = "eating the map",
+	.Stranger  = "being dimmer",
+	.Neighbors = "the noise",
+	.Sky       = "the rain",
 }
 
 HEIRS := [Heir_Id]Heir {

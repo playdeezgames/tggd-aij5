@@ -1,6 +1,7 @@
 #+build !js
 package game
 
+import "core:strings"
 import "core:testing"
 
 // Plays one scripted policy to the end and returns the final state. Bounded so a bug cannot hang the suite.
@@ -41,6 +42,8 @@ play :: proc(t: ^testing.T, seed: u64, policy: Policy) -> Game {
 						pick = i
 					}
 				}
+			case .Handover_Item, .Handover_Grudge:
+				pick = v.choice_count - 1 // hand over nothing: the cheapest handoff
 			case .Heir:
 				for i in 0 ..< HEIR_CHOICES {
 					if HEIRS[g.candidates[i]].minus != .Flame {
@@ -98,24 +101,114 @@ keeping_the_flame_alive_is_possible :: proc(t: ^testing.T) {
 
 @(test)
 only_one_item_and_one_grudge_cross :: proc(t: ^testing.T) {
+	count :: proc(held: [$E]Held) -> int {
+		n := 0
+		for h in held {
+			if h.present {
+				n += 1
+			}
+		}
+		return n
+	}
 	for seed in u64(0) ..< 100 {
 		g := new_game(seed)
-		last_generation := 1
 		for _ in 0 ..< MAX_STEPS {
 			if g.screen == .Over {
 				break
 			}
-			if g.generation != last_generation {
-				// a handover just completed
-				testing.expect(t, card(g.items) <= 1)
-				testing.expect(t, card(g.grudges) <= 1)
-				last_generation = g.generation
+			if g.screen == .Handoff {
+				testing.expect(t, count(g.items) <= 1)
+				testing.expect(t, count(g.grudges) <= 1)
 			}
 			v := make_view(g)
 			choose(&g, roll(&g, v.choice_count))
 			free_all(context.temp_allocator)
 		}
 	}
+}
+
+@(test)
+every_handoff_changes_the_words :: proc(t: ^testing.T) {
+	for id in Item_Id {
+		for stage in 0 ..< DRIFT_STEPS + 2 { 	// past the end too: clamped, and still no panic
+			if stage < DRIFT_STEPS - 1 {
+				testing.expectf(t, item_text(id, stage) != item_text(id, stage + 1), "%v stage %d", id, stage)
+			}
+			testing.expect(t, len(item_text(id, stage)) > 0)
+		}
+	}
+	for id in Grudge_Id {
+		for stage in 0 ..< DRIFT_STEPS + 2 {
+			if stage < DRIFT_STEPS - 1 {
+				testing.expectf(t, grudge_text(id, stage) != grudge_text(id, stage + 1), "%v stage %d", id, stage)
+			}
+			testing.expect(t, len(grudge_text(id, stage)) > 0)
+		}
+	}
+	free_all(context.temp_allocator)
+}
+
+@(test)
+grudges_lose_their_reason :: proc(t: ^testing.T) {
+	for id in Grudge_Id {
+		reason := GRUDGE_REASONS[id]
+		for stage in 0 ..< DRIFT_STEPS {
+			text := grudge_text(id, stage)
+			if stage < REASON_LOST_STAGE {
+				testing.expectf(t, strings.contains(text, reason), "%v stage %d should say why", id, stage)
+			} else {
+				testing.expectf(t, !strings.contains(text, reason), "%v stage %d should not say why", id, stage)
+				testing.expect(t, strings.contains(text, "nobody remembers why"))
+			}
+		}
+	}
+	free_all(context.temp_allocator)
+}
+
+@(test)
+a_handoff_ages_what_it_carries :: proc(t: ^testing.T) {
+	g := new_game(9)
+	choose(&g, 0)
+	g.items = {}
+	g.grudges = {}
+	g.items[.Ladle] = Held{true, 0}
+	g.items[.Soggy_Hat] = Held{true, 3}
+	g.grudges[.Sky] = Held{true, 1}
+	g.carry_item = Item_Id.Soggy_Hat
+	g.carry_grudge = Grudge_Id.Sky
+	g.heir = .Odo
+	finish_handover(&g)
+	testing.expect_value(t, g.screen, Screen.Handoff)
+	testing.expect_value(t, g.items[.Soggy_Hat], Held{true, 4})
+	testing.expect_value(t, g.grudges[.Sky], Held{true, 2})
+	testing.expect(t, !g.items[.Ladle].present)
+	// what was not carried is shown as left behind
+	testing.expect(t, g.left_items[.Ladle].present)
+	testing.expect(t, !g.left_items[.Soggy_Hat].present)
+	free_all(context.temp_allocator)
+}
+
+@(test)
+the_flame_always_drops_and_carrying_more_costs_more :: proc(t: ^testing.T) {
+	cases := [?]struct {
+		item:   bool,
+		grudge: bool,
+		cost:   int,
+	}{{false, false, HANDOFF_COST}, {true, false, HANDOFF_COST}, {false, true, HANDOFF_COST}, {true, true, HANDOFF_COST + EXTRA_CARRY_COST}}
+	for c in cases {
+		g := new_game(2)
+		choose(&g, 0)
+		g.items[.Ladle] = Held{true, 0}
+		g.grudges[.Goat] = Held{true, 0}
+		g.carry_item = Item_Id.Ladle if c.item else nil
+		g.carry_grudge = Grudge_Id.Goat if c.grudge else nil
+		g.heir = .Brindle // does not touch the flame
+		before := g.counters[.Flame]
+		finish_handover(&g)
+		testing.expect_value(t, before - g.counters[.Flame], c.cost)
+		testing.expect(t, g.counters[.Flame] < before)
+	}
+	free_all(context.temp_allocator)
 }
 
 @(test)
@@ -145,6 +238,7 @@ non_flame_counters_reset_at_handover :: proc(t: ^testing.T) {
 	// Odo: +Flame (persistent, so unaffected by the reset), -Snacks from the reset value.
 	testing.expect_value(t, g.counters[.Snacks], START_COUNTER - 1)
 	testing.expect_value(t, g.counters[.Flame], START_FLAME - HANDOFF_COST + 1)
+	testing.expect_value(t, g.screen, Screen.Handoff)
 	free_all(context.temp_allocator)
 }
 
@@ -157,6 +251,18 @@ content_is_well_formed :: proc(t: ^testing.T) {
 			o := event.options[i]
 			testing.expect(t, len(o.text) > 0 && len(o.text) <= 40)
 			testing.expect(t, len(o.result) > 0 && len(o.result) <= 80)
+		}
+	}
+	testing.expect(t, len(STATUS_LADDER) >= MAX_GENERATIONS && len(INTENSITY_LADDER) >= MAX_GENERATIONS)
+	for id in Item_Id {
+		for noun in ITEM_NOUNS[id] {
+			testing.expect(t, len(noun) > 0)
+		}
+	}
+	for id in Grudge_Id {
+		testing.expect(t, len(GRUDGE_REASONS[id]) > 0)
+		for target in GRUDGE_TARGETS[id] {
+			testing.expect(t, len(target) > 0)
 		}
 	}
 	testing.expect(t, len(Event_Id) > EVENTS_PER_GENERATION)

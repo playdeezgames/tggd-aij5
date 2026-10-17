@@ -5,7 +5,8 @@ package game
 START_FLAME :: 6
 START_COUNTER :: 3
 COUNTER_MAX :: 9
-HANDOFF_COST :: 1
+HANDOFF_COST :: 1 // every handoff costs this much flame, whatever you carry
+EXTRA_CARRY_COST :: 1 // carrying both an item and a grudge costs this much more
 EVENTS_PER_GENERATION :: 3
 MAX_GENERATIONS :: 8
 HEIR_CHOICES :: 3
@@ -58,26 +59,36 @@ Screen :: enum {
 	Heir,
 	Handover_Item,
 	Handover_Grudge,
+	Handoff,
 	Over,
+}
+
+// Something you hold. `stage` counts the handoffs it has survived; the words that describe it drift with it.
+Held :: struct {
+	present: bool,
+	stage:   int,
 }
 
 // A flat value type: no pointers, no heap. Copy it to snapshot a run.
 Game :: struct {
-	screen:       Screen,
-	generation:   int,
-	counters:     [Counter]int,
-	items:        bit_set[Item_Id],
-	grudges:      bit_set[Grudge_Id],
-	carry_item:   Maybe(Item_Id),
-	carry_grudge: Maybe(Grudge_Id),
-	events_seen:  bit_set[Event_Id], // this generation only, so no event repeats within one
-	events_left:  int,
-	event:        Event_Id,
-	last_option:  int,
-	candidates:   [HEIR_CHOICES]Heir_Id,
-	heir:         Heir_Id,
-	over:         Over_Reason,
-	rng:          u64,
+	screen:        Screen,
+	generation:    int,
+	counters:      [Counter]int,
+	items:         [Item_Id]Held,
+	grudges:       [Grudge_Id]Held,
+	carry_item:    Maybe(Item_Id),
+	carry_grudge:  Maybe(Grudge_Id),
+	left_items:    [Item_Id]Held, // what the last handoff did not carry, for the Handoff screen
+	left_grudges:  [Grudge_Id]Held,
+	handoff_cost:  int,
+	events_seen:   bit_set[Event_Id], // this generation only, so no event repeats within one
+	events_left:   int,
+	event:         Event_Id,
+	last_option:   int,
+	candidates:    [HEIR_CHOICES]Heir_Id,
+	heir:          Heir_Id,
+	over:          Over_Reason,
+	rng:           u64,
 }
 
 new_game :: proc(seed: u64) -> Game {
@@ -98,6 +109,15 @@ roll :: proc(g: ^Game, n: int) -> int {
 	g.rng ~= g.rng >> 7
 	g.rng ~= g.rng << 17
 	return int(g.rng % u64(n))
+}
+
+any_held :: proc(held: [$E]Held) -> bool {
+	for h in held {
+		if h.present {
+			return true
+		}
+	}
+	return false
 }
 
 start_run :: proc(g: ^Game) {
@@ -143,11 +163,12 @@ apply_delta :: proc(g: ^Game, delta: [Counter]int) {
 choose_option :: proc(g: ^Game, index: int) {
 	option := EVENTS[g.event].options[index]
 	apply_delta(g, option.delta)
-	if item, ok := option.item.?; ok {
-		g.items += {item}
+	// Getting something you already hold keeps its age: it does not make it new again.
+	if item, ok := option.item.?; ok && !g.items[item].present {
+		g.items[item] = Held{true, 0}
 	}
-	if grudge, ok := option.grudge.?; ok {
-		g.grudges += {grudge}
+	if grudge, ok := option.grudge.?; ok && !g.grudges[grudge].present {
+		g.grudges[grudge] = Held{true, 0}
 	}
 	g.last_option = index
 	g.screen = .Result
@@ -187,7 +208,7 @@ choose_heir :: proc(g: ^Game, index: int) {
 	g.heir = g.candidates[index]
 	g.carry_item = nil
 	g.carry_grudge = nil
-	if g.items != {} {
+	if any_held(g.items) {
 		g.screen = .Handover_Item
 	} else {
 		after_item_step(g)
@@ -196,7 +217,7 @@ choose_heir :: proc(g: ^Game, index: int) {
 
 // Both handover steps are skipped when there is nothing to choose from.
 after_item_step :: proc(g: ^Game) {
-	if g.grudges != {} {
+	if any_held(g.grudges) {
 		g.screen = .Handover_Grudge
 	} else {
 		finish_handover(g)
@@ -208,10 +229,19 @@ end_run :: proc(g: ^Game, reason: Over_Reason) {
 	g.screen = .Over
 }
 
-// Exactly one item and one grudge cross; everything else, including the other counters, is left behind.
+carry_cost :: proc(g: Game) -> int {
+	cost := HANDOFF_COST
+	if g.carry_item != nil && g.carry_grudge != nil {
+		cost += EXTRA_CARRY_COST
+	}
+	return cost
+}
+
+// Exactly one item and one grudge cross, and each is one stage older (so its words drift). Everything else,
+// including the other counters, is left behind. The flame always drops.
 finish_handover :: proc(g: ^Game) {
-	g.generation += 1
-	g.counters[.Flame] = clamp(g.counters[.Flame] - HANDOFF_COST, 0, COUNTER_MAX)
+	g.handoff_cost = carry_cost(g^)
+	g.counters[.Flame] = clamp(g.counters[.Flame] - g.handoff_cost, 0, COUNTER_MAX)
 	for c in Counter {
 		if c != .Flame {
 			g.counters[c] = START_COUNTER
@@ -220,17 +250,28 @@ finish_handover :: proc(g: ^Game) {
 	heir := HEIRS[g.heir]
 	g.counters[heir.plus] = clamp(g.counters[heir.plus] + 1, 0, COUNTER_MAX)
 	g.counters[heir.minus] = clamp(g.counters[heir.minus] - 1, 0, COUNTER_MAX)
+
+	g.left_items = g.items
+	g.left_grudges = g.grudges
 	g.items = {}
 	g.grudges = {}
 	if item, ok := g.carry_item.?; ok {
-		g.items += {item}
+		g.items[item] = Held{true, g.left_items[item].stage + 1}
+		g.left_items[item].present = false
 	}
 	if grudge, ok := g.carry_grudge.?; ok {
-		g.grudges += {grudge}
+		g.grudges[grudge] = Held{true, g.left_grudges[grudge].stage + 1}
+		g.left_grudges[grudge].present = false
 	}
+	g.screen = .Handoff
+}
+
+// Called when the player acknowledges the Handoff screen.
+finish_handoff :: proc(g: ^Game) {
 	if g.counters[.Flame] <= 0 {
 		end_run(g, .Flame_Out)
 		return
 	}
+	g.generation += 1
 	begin_generation(g)
 }

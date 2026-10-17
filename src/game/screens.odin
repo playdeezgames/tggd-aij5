@@ -55,37 +55,23 @@ delta_summary :: proc(d: [Counter]int) -> string {
 	return strings.to_string(sb)
 }
 
-held_items :: proc(items: bit_set[Item_Id], out: ^[len(Item_Id)]Item_Id) -> int {
-	n := 0
-	for i in Item_Id {
-		if i in items {
-			out[n] = i
-			n += 1
-		}
-	}
-	return n
-}
-
-held_grudges :: proc(grudges: bit_set[Grudge_Id], out: ^[len(Grudge_Id)]Grudge_Id) -> int {
-	n := 0
-	for gr in Grudge_Id {
-		if gr in grudges {
-			out[n] = gr
-			n += 1
-		}
-	}
-	return n
-}
-
-// "a ladle, a soggy hat" or "nothing"
-item_list :: proc(items: bit_set[Item_Id]) -> string {
+// Everything held in these sets, as "a ladle; a grudge against the goat for eating the map", or "nothing".
+holdings_text :: proc(items: [Item_Id]Held, grudges: [Grudge_Id]Held) -> string {
 	sb := strings.builder_make(context.temp_allocator)
-	for i in Item_Id {
-		if i in items {
+	for id in Item_Id {
+		if items[id].present {
 			if strings.builder_len(sb) > 0 {
-				strings.write_string(&sb, ", ")
+				strings.write_string(&sb, "; ")
 			}
-			strings.write_string(&sb, ITEM_NAMES[i])
+			strings.write_string(&sb, item_text(id, items[id].stage))
+		}
+	}
+	for id in Grudge_Id {
+		if grudges[id].present {
+			if strings.builder_len(sb) > 0 {
+				strings.write_string(&sb, "; ")
+			}
+			strings.write_string(&sb, grudge_text(id, grudges[id].stage))
 		}
 	}
 	if strings.builder_len(sb) == 0 {
@@ -94,20 +80,27 @@ item_list :: proc(items: bit_set[Item_Id]) -> string {
 	return strings.to_string(sb)
 }
 
-grudge_list :: proc(grudges: bit_set[Grudge_Id]) -> string {
-	sb := strings.builder_make(context.temp_allocator)
-	for gr in Grudge_Id {
-		if gr in grudges {
-			if strings.builder_len(sb) > 0 {
-				strings.write_string(&sb, ", ")
-			}
-			strings.write_string(&sb, GRUDGE_NAMES[gr])
+// The held entries in id order, so a choice index maps back to an id.
+held_items :: proc(items: [Item_Id]Held, out: ^[len(Item_Id)]Item_Id) -> int {
+	n := 0
+	for id in Item_Id {
+		if items[id].present {
+			out[n] = id
+			n += 1
 		}
 	}
-	if strings.builder_len(sb) == 0 {
-		return "nothing"
+	return n
+}
+
+held_grudges :: proc(grudges: [Grudge_Id]Held, out: ^[len(Grudge_Id)]Grudge_Id) -> int {
+	n := 0
+	for id in Grudge_Id {
+		if grudges[id].present {
+			out[n] = id
+			n += 1
+		}
 	}
-	return strings.to_string(sb)
+	return n
 }
 
 make_view :: proc(g: Game) -> View {
@@ -138,10 +131,10 @@ make_view :: proc(g: Game) -> View {
 		add_line(&v, option.result)
 		add_line(&v, delta_summary(option.delta))
 		if item, ok := option.item.?; ok {
-			add_line(&v, fmt.tprintf("You now hold %s.", ITEM_NAMES[item]))
+			add_line(&v, fmt.tprintf("You now hold %s.", item_text(item, g.items[item].stage)))
 		}
 		if grudge, ok := option.grudge.?; ok {
-			add_line(&v, fmt.tprintf("You now resent %s.", GRUDGE_NAMES[grudge]))
+			add_line(&v, fmt.tprintf("You now hold %s.", grudge_text(grudge, g.grudges[grudge].stage)))
 		}
 		add_choice(&v, "Continue")
 	case .Heir:
@@ -153,24 +146,39 @@ make_view :: proc(g: Game) -> View {
 		}
 	case .Handover_Item:
 		add_line(&v, status_line(g))
-		add_line(&v, "Only one thing can be handed over. Which?")
-		add_line(&v, fmt.tprintf("You hold: %s. Whatever you do not choose is left behind.", item_list(g.items)))
+		add_line(&v, "Only one thing can be handed over, and it will not arrive the same. The rest is left behind.")
 		list: [len(Item_Id)]Item_Id
 		n := held_items(g.items, &list)
 		for i in 0 ..< n {
-			add_choice(&v, ITEM_NAMES[list[i]])
+			add_choice(&v, item_text(list[i], g.items[list[i]].stage))
 		}
 		add_choice(&v, "Hand over nothing")
 	case .Handover_Grudge:
 		add_line(&v, status_line(g))
-		add_line(&v, "Only one grudge can be handed over. Which?")
-		add_line(&v, fmt.tprintf("You resent: %s. Whatever you do not choose is left behind.", grudge_list(g.grudges)))
+		add_line(&v, "Only one grudge can be handed over, and it will not arrive the same. The rest is left behind.")
+		if g.carry_item != nil {
+			add_line(&v, fmt.tprintf("Carrying a grudge as well as a thing costs %d more flame.", EXTRA_CARRY_COST))
+		}
 		list: [len(Grudge_Id)]Grudge_Id
 		n := held_grudges(g.grudges, &list)
 		for i in 0 ..< n {
-			add_choice(&v, GRUDGE_NAMES[list[i]])
+			add_choice(&v, grudge_text(list[i], g.grudges[list[i]].stage))
 		}
 		add_choice(&v, "Hand over nothing")
+	case .Handoff:
+		heir := HEIRS[g.heir]
+		add_line(&v, status_line(g))
+		add_line(&v, fmt.tprintf("%s takes the torch. The handoff costs %d flame.", heir.name, g.handoff_cost))
+		add_line(&v, fmt.tprintf("Left behind: %s.", holdings_text(g.left_items, g.left_grudges)))
+		if item, ok := g.carry_item.?; ok {
+			stage := g.items[item].stage
+			add_line(&v, fmt.tprintf("It arrives as %s. (It was %s.)", item_text(item, stage), item_text(item, stage - 1)))
+		}
+		if grudge, ok := g.carry_grudge.?; ok {
+			stage := g.grudges[grudge].stage
+			add_line(&v, fmt.tprintf("It arrives as %s. (It was %s.)", grudge_text(grudge, stage), grudge_text(grudge, stage - 1)))
+		}
+		add_choice(&v, "Continue")
 	case .Over:
 		switch g.over {
 		case .Flame_Out:
@@ -178,8 +186,7 @@ make_view :: proc(g: Game) -> View {
 		case .Dynasty_End:
 			add_line(&v, "The torch is still lit. Nobody remembers who lit it.")
 		}
-		add_line(&v, fmt.tprintf("Held at the end: %s.", item_list(g.items)))
-		add_line(&v, fmt.tprintf("Resented at the end: %s.", grudge_list(g.grudges)))
+		add_line(&v, fmt.tprintf("What survived: %s.", holdings_text(g.items, g.grudges)))
 		add_choice(&v, "Begin again")
 	}
 	return v
@@ -214,5 +221,7 @@ choose :: proc(g: ^Game, index: int) {
 			g.carry_grudge = list[index]
 		}
 		finish_handover(g)
+	case .Handoff:
+		finish_handoff(g)
 	}
 }

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status
 
-Repo for **AI Browser Game Jam 5** (https://itch.io/jam/ai-jam-5). The chosen concept (an absurd menu-driven succession game, "Pass the Torch" as a working title) and its design rules, architecture, milestones and tests are in [PLAN.md](PLAN.md). Milestones 0 (scaffold) and 1 (text-only dynasty loop with placeholder content) are done; the next is milestone 2 (one-slot handoff UI, drift ladder, flame cost, grudge reason loss).
+Repo for **AI Browser Game Jam 5** (https://itch.io/jam/ai-jam-5). The chosen concept (an absurd menu-driven succession game, "Pass the Torch" as a working title) and its design rules, architecture, milestones and tests are in [PLAN.md](PLAN.md). Milestones 0 (scaffold), 1 (text-only dynasty loop, placeholder content) and 2 (one-slot handoff with drift, carry cost, grudges losing their reason) are done; the next is milestone 3 (content pass).
 
 ## Commands
 
@@ -18,7 +18,7 @@ tools/ship.sh                      # tests, size build, zip; pushes to itch only
 
 ## Layout
 
-`src/game` is the pure rules package (no platform imports; tests are `#+build !js`): `game.odin` is the flat `Game` struct and transitions, `content.odin` the data tables (variables, with `#partial` enum-array literals), `screens.odin` the `Screen` state machine (`make_view` builds the visible lines and choices in `context.temp_allocator`; `choose(index)` runs the transition). The web layer only draws a `View` through `dom_clear/dom_line/dom_choice` imports, sends clicks back through the `on_choice` export, and frees the temp allocator after each draw. `src/web` is `package main` behind `#+build js` and imports it as `tggd:game` (build with `-collection:tggd=src`). `web/index.html` is copied beside `game.wasm` and `odin.js` into `build/web`. The `TARGET` in `tools/ship.sh` is a placeholder until the itch page exists.
+`src/game` is the pure rules package (no platform imports; tests are `#+build !js`): `game.odin` is the flat `Game` struct and transitions, `content.odin` the data tables (variables, with `#partial` enum-array literals) including the drift ladders, `drift.odin` the only place words change (`item_text` / `grudge_text` are pure functions of id and stage; every handoff adds one stage, and the shared status/intensity ladders make the text differ every time), `screens.odin` the `Screen` state machine (`make_view` builds the visible lines and choices in `context.temp_allocator`; `choose(index)` runs the transition). The web layer only draws a `View` through `dom_clear/dom_line/dom_choice` imports, sends clicks back through the `on_choice` export, and frees the temp allocator after each draw. `src/web` is `package main` behind `#+build js` and imports it as `tggd:game` (build with `-collection:tggd=src`). `web/index.html` is copied beside `game.wasm` and `odin.js` into `build/web`. The `TARGET` in `tools/ship.sh` is a placeholder until the itch page exists.
 
 ## Jam facts
 
