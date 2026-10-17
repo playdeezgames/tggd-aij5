@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pass the Torch</title>
+<style>
+	html, body { margin: 0; background: #000; color: #ddd; font-family: monospace; }
+	main { max-width: 40rem; margin: 0 auto; padding: 1rem; }
+	#view { white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<main>
+	<div id="view">Loading...</div>
+</main>
+<script type="text/javascript" src="odin.js"></script>
+<script type="text/javascript">
+	const memory = new odin.WasmMemoryInterface();
+	const view = document.getElementById("view");
+	const imports = {
+		env: {
+			dom_set_text: (ptr, len) => { view.textContent = memory.loadString(ptr, len); },
+		},
+	};
+	odin.runWasm("game.wasm", null, imports, memory);
+</script>
+</body>
+</html>

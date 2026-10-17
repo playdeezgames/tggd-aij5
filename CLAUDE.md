@@ -4,7 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status
 
-Repo for **AI Browser Game Jam 5** (https://itch.io/jam/ai-jam-5). No source exists yet; the project is moving from ideation to prototyping. The chosen concept (an absurd menu-driven succession game, "Pass the Torch" as a working title) and its design rules, architecture, milestones and tests are in [PLAN.md](PLAN.md). Update this file once a build exists.
+Repo for **AI Browser Game Jam 5** (https://itch.io/jam/ai-jam-5). The chosen concept (an absurd menu-driven succession game, "Pass the Torch" as a working title) and its design rules, architecture, milestones and tests are in [PLAN.md](PLAN.md). Milestone 0 (scaffold) is done: a wasm page renders a headline from the rules package.
+
+## Commands
+
+```bash
+tools/test.sh                      # native odin test of src/game, plus a js_wasm32 check of both packages
+tools/build.sh                     # builds build/web (ODIN_FLAGS="-o:size" for shipping)
+PORT=8093 tools/serve.sh           # serves build/web; wasm needs http, and the port must be free
+odin test src/game -collection:tggd=src -define:ODIN_TEST_THREADS=1 -define:ODIN_TEST_NAMES=game.new_game_starts_at_generation_one   # one test
+tools/ship.sh                      # tests, size build, zip; pushes to itch only with --push
+```
+
+## Layout
+
+`src/game` is the pure rules package (no platform imports; tests are `#+build !js`). `src/web` is `package main` behind `#+build js` and imports it as `tggd:game` (build with `-collection:tggd=src`). `web/index.html` is copied beside `game.wasm` and `odin.js` into `build/web`. The `TARGET` in `tools/ship.sh` is a placeholder until the itch page exists.
 
 ## Jam facts
 
