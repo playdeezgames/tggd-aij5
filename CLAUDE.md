@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status
 
-Repo for **AI Browser Game Jam 5** (https://itch.io/jam/ai-jam-5). The chosen concept (an absurd menu-driven succession game, "Pass the Torch" as a working title) and its design rules, architecture, milestones and tests are in [PLAN.md](PLAN.md). Milestones 0 (scaffold), 1 (text-only dynasty loop, placeholder content) 2 (one-slot handoff with drift, carry cost, grudges losing their reason) and 3 (content pass: 25 events, 12 heirs, 8 items, 8 grudges, options gated by counters) 4 (saves, and carry-over between runs) and 5 (torch glyph, heir portraits, sounds) are done; the next is milestone 6 (playtest and balance).
+Repo for **AI Browser Game Jam 5** (https://itch.io/jam/ai-jam-5). The chosen concept (an absurd menu-driven succession game, "Pass the Torch" as a working title) and its design rules, architecture, milestones and tests are in [PLAN.md](PLAN.md). Milestones 0 (scaffold), 1 (text-only dynasty loop, placeholder content) 2 (one-slot handoff with drift, carry cost, grudges losing their reason) and 3 (content pass: 25 events, 12 heirs, 8 items, 8 grudges, options gated by counters) 4 (saves, and carry-over between runs) 5 (torch glyph, heir portraits, sounds) and 6 (playtest and balance) are done; the next is milestone 7 (ship material: itch copy, cover, screenshots, devlog).
 
 ## Commands
 
@@ -39,7 +39,7 @@ The user's notes vault is `/home/yermom/git/bok-of-splorr/splorr` (added as a wo
 
 ## Balance guardrails
 
-A run draws 3 events per generation over 8 generations and never repeats one (`#assert` in `game.odin` keeps `Event_Id` large enough). Tests enforce: a flame-maximising policy always survives, random play survives between 2% and 70% of runs (it is about 32% at `START_FLAME` 3), and every event keeps at least two ungated options. Re-run `tools/test.sh` after any content or cost change; the survival rate is logged.
+A run draws 3 events per generation over 8 generations and never repeats one (`#assert` in `game.odin` keeps `Event_Id` large enough). Most flame-gaining options are gated behind a resource (counters reset to 3 each generation, so spending one closes the gates that need it), and the view lists out-of-reach options as "Not yet: ... (needs X n)". Measured with bot policies over 1000 seeds at `START_FLAME` 3 and `HANDOFF_COST` 1: random play survives about 14%, a casual policy (30% random) about 90%, a careful or flame-maximising policy about 99 to 100%. Tests enforce: random play survives between 2% and 70%, a careful policy at least 85%, a flame-maximising policy always, and every event keeps at least two ungated options. `HANDOFF_COST` 2 made handing over nothing the dominant strategy (greedy 99.7%, a policy that carries both things 32%), so keep carrying cheap. Re-run `tools/test.sh` after any content or cost change; the survival rates are logged. A full dynasty is about 70 clicks.
 
 New fields on `Game` need a matching change in `serialize_game`, `parse_game`, a validity range, and the round-trip and damaged-save tests. Test loops that pick random choices must pick 0 at the title, because choice 1 there is "Forget the past".
 

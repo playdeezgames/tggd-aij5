@@ -10,6 +10,7 @@ import "core:testing"
 Policy :: enum {
 	Random,
 	Greedy_Flame, // always the option that keeps the torch lit
+	Careful, // weighs every resource, and carries things across
 }
 
 MAX_STEPS :: 2000
@@ -22,9 +23,11 @@ play :: proc(t: ^testing.T, seed: u64, policy: Policy) -> Game {
 		testing.expect(t, v.choice_count >= 1 && v.choice_count <= MAX_CHOICES)
 		for i in 0 ..< v.line_count {
 			testing.expect(t, len(v.lines[i]) > 0)
+			testing.expectf(t, !strings.contains(v.lines[i], "%!"), "format error in: %s", v.lines[i])
 		}
 		for i in 0 ..< v.choice_count {
 			testing.expect(t, len(v.choices[i]) > 0)
+			testing.expectf(t, !strings.contains(v.choices[i], "%!"), "format error in: %s", v.choices[i])
 		}
 		if g.screen == .Over && policy != .Random {
 			free_all(context.temp_allocator)
@@ -34,20 +37,36 @@ play :: proc(t: ^testing.T, seed: u64, policy: Policy) -> Game {
 		switch policy {
 		case .Random:
 			pick = roll(&g, v.choice_count)
-		case .Greedy_Flame:
+		case .Greedy_Flame, .Careful:
 			#partial switch g.screen {
 			case .Event:
+				if g.event_kind != .Normal {
+					break // a relative: take the thing, which is option 0
+				}
 				open: [3]int
 				n := available_options(g, &open)
-				best := EVENTS[g.event].options[open[0]].delta[.Flame]
-				for i in 1 ..< n {
-					if d := EVENTS[g.event].options[open[i]].delta[.Flame]; d > best {
-						best = d
+				best := min(int)
+				for i in 0 ..< n {
+					o := EVENTS[g.event].options[open[i]]
+					score := o.delta[.Flame] * 10
+					if policy == .Careful { 	// also weighs the other resources, and eases off the flame when it is high
+						for c in Counter {
+							if c != .Flame {
+								score += o.delta[c] * 3
+							}
+						}
+						if g.counters[.Flame] >= 6 {
+							score -= o.delta[.Flame] * 8
+						}
+					}
+					if score > best {
+						best = score
 						pick = i
 					}
 				}
 			case .Handover_Item, .Handover_Grudge:
-				pick = v.choice_count - 1 // hand over nothing: the cheapest handoff
+				// Greedy hands over nothing (the cheapest handoff); Careful keeps the first thing it can
+				pick = v.choice_count - 1 if policy == .Greedy_Flame else 0
 			case .Heir:
 				for i in 0 ..< HEIR_CHOICES {
 					if HEIRS[g.candidates[i]].minus != .Flame {
@@ -431,4 +450,74 @@ heir_faces_are_distinct_and_on_the_sheet :: proc(t: ^testing.T) {
 		}
 		append(&seen, tile)
 	}
+}
+
+@(test)
+a_thoughtful_player_usually_survives :: proc(t: ^testing.T) {
+	// Balance guardrails: a player weighing every resource should win nearly always, a careless one should not.
+	careful := 0
+	for seed in u64(0) ..< 200 {
+		if play(t, seed, .Careful).over == .Dynasty_End {
+			careful += 1
+		}
+	}
+	log.infof("a careful policy survived %d of 200 runs", careful)
+	testing.expect(t, careful * 100 >= 200 * 85)
+}
+
+@(test)
+out_of_reach_options_are_named_with_their_price :: proc(t: ^testing.T) {
+	g := new_game(4)
+	choose(&g, 0)
+	g.event = .Permit
+	g.counters[.Snacks] = 1
+	v := make_view(g)
+	found := false
+	for i in 0 ..< v.line_count {
+		if v.lines[i] == "Not yet: Bribe with cheese. (needs Snacks 2)" {
+			found = true
+		}
+	}
+	testing.expect(t, found)
+	testing.expect_value(t, v.choice_count, 2)
+	g.counters[.Snacks] = 2
+	v = make_view(g)
+	for i in 0 ..< v.line_count {
+		testing.expect(t, !strings.has_prefix(v.lines[i], "Not yet"))
+	}
+	testing.expect_value(t, v.choice_count, 3)
+	free_all(context.temp_allocator)
+}
+
+@(test)
+the_handoff_screen_shows_the_generation_about_to_begin :: proc(t: ^testing.T) {
+	g := new_game(4)
+	choose(&g, 0)
+	g.generation = 3
+	g.heir = .Odo
+	g.screen = .Handover_Grudge
+	choose(&g, 0) // nothing held
+	testing.expect_value(t, g.screen, Screen.Handoff)
+	testing.expect(t, strings.has_prefix(make_view(g).lines[0], "Generation 4 of"))
+	free_all(context.temp_allocator)
+}
+
+@(test)
+the_end_shows_only_what_will_be_remembered :: proc(t: ^testing.T) {
+	g := new_game(4)
+	choose(&g, 0)
+	g.generation = 5
+	g.items[.Ladle] = Held{true, 1}
+	g.items[.Soggy_Hat] = Held{true, 4}
+	g.grudges[.Sky] = Held{true, 0}
+	end_run(&g, .Flame_Out)
+	v := make_view(g)
+	text := ""
+	for i in 0 ..< v.line_count {
+		text = strings.concatenate({text, v.lines[i], "\n"}, context.temp_allocator)
+	}
+	testing.expect(t, strings.contains(text, "What survived: a cherished hat")) // the oldest thing (hat, stage 4)
+	testing.expect(t, !strings.contains(text, "ladle"))
+	testing.expect(t, strings.contains(text, "grudge against the sky"))
+	free_all(context.temp_allocator)
 }

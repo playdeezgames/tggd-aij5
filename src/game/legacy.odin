@@ -1,13 +1,10 @@
 // Carry-over between runs: what a finished dynasty leaves behind and how it comes back.
 package game
 
-// Records what the dynasty still held: the oldest item and the oldest grudge. A run that held neither leaves
-// nothing. Existing records age one stage first, so older memories drift further.
-remember :: proc(g: ^Game) {
-	rec := Legacy_Record {
-		generations = g.generation,
-		survived    = g.over == .Dynasty_End,
-	}
+// What a dynasty would leave: the oldest item and the oldest grudge it still holds. false when it holds neither.
+make_record :: proc(g: Game) -> (rec: Legacy_Record, ok: bool) {
+	rec.generations = g.generation
+	rec.survived = g.over == .Dynasty_End
 	for id in Item_Id {
 		if g.items[id].present && (!rec.has_item || g.items[id].stage > rec.item_stage) {
 			rec.has_item = true
@@ -22,7 +19,14 @@ remember :: proc(g: ^Game) {
 			rec.grudge_stage = g.grudges[id].stage
 		}
 	}
-	if !rec.has_item && !rec.has_grudge {
+	return rec, rec.has_item || rec.has_grudge
+}
+
+// Records what the dynasty left. A run that held neither leaves nothing. Existing records age one stage first, so
+// older memories drift further.
+remember :: proc(g: ^Game) {
+	rec, ok := make_record(g^)
+	if !ok {
 		return
 	}
 	l := &g.legacy

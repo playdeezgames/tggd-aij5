@@ -28,18 +28,11 @@ add_choice :: proc(v: ^View, s: string) {
 	v.choice_count += 1
 }
 
-status_line :: proc(g: Game) -> string {
+// Two lines: where the dynasty is and the torch, then the resources (they are what gate the better options).
+add_status :: proc(v: ^View, g: Game, generation: int) {
 	c := g.counters
-	return fmt.tprintf(
-		"Generation %d of %d   Flame %d  Pride %d  Livestock %d  Reputation %d  Snacks %d",
-		g.generation,
-		MAX_GENERATIONS,
-		c[.Flame],
-		c[.Pride],
-		c[.Livestock],
-		c[.Reputation],
-		c[.Snacks],
-	)
+	add_line(v, fmt.tprintf("Generation %d of %d   Flame %d", generation, MAX_GENERATIONS, c[.Flame]))
+	add_line(v, fmt.tprintf("Pride %d  Livestock %d  Reputation %d  Snacks %d", c[.Pride], c[.Livestock], c[.Reputation], c[.Snacks]))
 }
 
 delta_summary :: proc(d: [Counter]int) -> string {
@@ -113,8 +106,8 @@ current_option :: proc(g: Game) -> Option {
 	return EVENTS[g.event].options[g.last_option]
 }
 
-// "Lasted 5 generations: a family goat map; an old grudge against goats, though nobody remembers why"
-legacy_line :: proc(rec: Legacy_Record) -> string {
+// "a family goat map; an old grudge against goats, though nobody remembers why" (or "nothing")
+record_holdings :: proc(rec: Legacy_Record) -> string {
 	items: [Item_Id]Held
 	grudges: [Grudge_Id]Held
 	if rec.has_item {
@@ -123,8 +116,13 @@ legacy_line :: proc(rec: Legacy_Record) -> string {
 	if rec.has_grudge {
 		grudges[rec.grudge] = Held{true, rec.grudge_stage}
 	}
+	return holdings_text(items, grudges)
+}
+
+// "Lasted 5 generations: a family goat map; an old grudge against goats, though nobody remembers why."
+legacy_line :: proc(rec: Legacy_Record) -> string {
 	how := "Reached the end" if rec.survived else fmt.tprintf("Lasted %d generations", rec.generations)
-	return fmt.tprintf("%s: %s.", how, holdings_text(items, grudges))
+	return fmt.tprintf("%s: %s.", how, record_holdings(rec))
 }
 
 // The face of whoever holds the torch on this screen.
@@ -169,7 +167,7 @@ make_view :: proc(g: Game) -> View {
 			add_choice(&v, "Forget the past")
 		}
 	case .Event:
-		add_line(&v, status_line(g))
+		add_status(&v, g, g.generation)
 		if g.events_left == EVENTS_PER_GENERATION {
 			if g.generation == 1 {
 				add_line(&v, "You hold the torch.")
@@ -191,6 +189,13 @@ make_view :: proc(g: Game) -> View {
 		} else {
 			event := EVENTS[g.event]
 			add_line(&v, event.prompt)
+			for i in 0 ..< event.option_count { 	// say what is out of reach, and why, so resources feel like they matter
+				o := event.options[i]
+				if !option_available(g, o) {
+					r := o.requires.? or_else Requirement{}
+					add_line(&v, fmt.tprintf("Not yet: %s (needs %v %d)", o.text, r.counter, r.at_least))
+				}
+			}
 			open: [3]int
 			n := available_options(g, &open)
 			for i in 0 ..< n {
@@ -199,7 +204,7 @@ make_view :: proc(g: Game) -> View {
 		}
 	case .Result:
 		option := current_option(g)
-		add_line(&v, status_line(g))
+		add_status(&v, g, g.generation)
 		add_line(&v, option.result)
 		add_line(&v, delta_summary(option.delta))
 		if g.event_kind != .Normal && g.last_option == 0 {
@@ -218,7 +223,7 @@ make_view :: proc(g: Game) -> View {
 		}
 		add_choice(&v, "Continue")
 	case .Heir:
-		add_line(&v, status_line(g))
+		add_status(&v, g, g.generation)
 		add_line(&v, "The torch must go to someone. Who?")
 		for i in 0 ..< HEIR_CHOICES {
 			heir := HEIRS[g.candidates[i]]
@@ -226,7 +231,7 @@ make_view :: proc(g: Game) -> View {
 			add_choice(&v, fmt.tprintf("%s, %s (+%v, -%v)", heir.name, heir.trait, heir.plus, heir.minus))
 		}
 	case .Handover_Item:
-		add_line(&v, status_line(g))
+		add_status(&v, g, g.generation)
 		add_line(&v, "Only one thing can be handed over, and it will not arrive the same. The rest is left behind.")
 		list: [len(Item_Id)]Item_Id
 		n := held_items(g.items, &list)
@@ -235,7 +240,7 @@ make_view :: proc(g: Game) -> View {
 		}
 		add_choice(&v, "Hand over nothing")
 	case .Handover_Grudge:
-		add_line(&v, status_line(g))
+		add_status(&v, g, g.generation)
 		add_line(&v, "Only one grudge can be handed over, and it will not arrive the same. The rest is left behind.")
 		if g.carry_item != nil {
 			add_line(&v, fmt.tprintf("Carrying a grudge as well as a thing costs %d more flame.", EXTRA_CARRY_COST))
@@ -248,16 +253,16 @@ make_view :: proc(g: Game) -> View {
 		add_choice(&v, "Hand over nothing")
 	case .Handoff:
 		heir := HEIRS[g.heir]
-		add_line(&v, status_line(g))
+		add_status(&v, g, g.generation + 1) // the generation that is about to begin
 		add_line(&v, fmt.tprintf("%s takes the torch. The handoff costs %d flame.", heir.name, g.handoff_cost))
 		add_line(&v, fmt.tprintf("Left behind: %s.", holdings_text(g.left_items, g.left_grudges)))
 		if item, ok := g.carry_item.?; ok {
 			stage := g.items[item].stage
-			add_line(&v, fmt.tprintf("It arrives as %s. (It was %s.)", item_text(item, stage), item_text(item, stage - 1)))
+			add_line(&v, fmt.tprintf("Thing: was %s, now %s.", item_text(item, stage - 1), item_text(item, stage)))
 		}
 		if grudge, ok := g.carry_grudge.?; ok {
 			stage := g.grudges[grudge].stage
-			add_line(&v, fmt.tprintf("It arrives as %s. (It was %s.)", grudge_text(grudge, stage), grudge_text(grudge, stage - 1)))
+			add_line(&v, fmt.tprintf("Grudge: was %s, now %s.", grudge_text(grudge, stage - 1), grudge_text(grudge, stage)))
 		}
 		add_choice(&v, "Continue")
 	case .Over:
@@ -267,9 +272,12 @@ make_view :: proc(g: Game) -> View {
 		case .Dynasty_End:
 			add_line(&v, "The torch is still lit. Nobody remembers who lit it.")
 		}
-		add_line(&v, fmt.tprintf("What survived: %s.", holdings_text(g.items, g.grudges)))
-		if any_held(g.items) || any_held(g.grudges) {
+		// Only the oldest thing and the oldest grudge survive, and they are what the next dynasty hears.
+		if rec, ok := make_record(g); ok {
+			add_line(&v, fmt.tprintf("What survived: %s.", record_holdings(rec)))
 			add_line(&v, "Word of it will reach the next dynasty.")
+		} else {
+			add_line(&v, "What survived: nothing.")
 		}
 		add_choice(&v, "Begin again")
 	}

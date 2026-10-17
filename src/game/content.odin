@@ -125,6 +125,7 @@ EVENTS := [Event_Id]Event {
 			},
 			{
 				text = "Follow the goat.",
+				requires = Requirement{.Livestock, 3},
 				result = "The goat leads you in a circle, which is somehow correct.",
 				delta = #partial {.Flame = 1, .Snacks = -1},
 				item = .Goat_Chewed_Map,
@@ -147,6 +148,7 @@ EVENTS := [Event_Id]Event {
 			},
 			{
 				text = "Hold theirs instead.",
+				requires = Requirement{.Pride, 3},
 				result = "Theirs is dimmer. You say nothing.",
 				delta = #partial {.Flame = 1, .Pride = -1},
 				grudge = .Stranger,
@@ -181,6 +183,7 @@ EVENTS := [Event_Id]Event {
 		options = {
 			{
 				text = "Shelter it with your hat.",
+				requires = Requirement{.Pride, 3},
 				result = "The hat is ruined. The torch is smug.",
 				delta = #partial {.Flame = 1, .Pride = -1},
 				item = .Soggy_Hat,
@@ -209,6 +212,7 @@ EVENTS := [Event_Id]Event {
 			},
 			{
 				text = "Skip it.",
+				requires = Requirement{.Reputation, 3},
 				result = "You stay home with the torch. Word gets around.",
 				delta = #partial {.Reputation = -1, .Flame = 1},
 			},
@@ -237,6 +241,7 @@ EVENTS := [Event_Id]Event {
 			},
 			{
 				text = "Carry oil in it.",
+				requires = Requirement{.Livestock, 3},
 				result = "The oil is borrowed too. Nobody asks.",
 				delta = #partial {.Flame = 1, .Reputation = -1},
 			},
@@ -259,6 +264,7 @@ EVENTS := [Event_Id]Event {
 			},
 			{
 				text = "Light it.",
+				requires = Requirement{.Snacks, 3},
 				result = "Cheese burns longer than expected. The room objects.",
 				delta = #partial {.Flame = 1, .Reputation = -2},
 			},
@@ -281,6 +287,7 @@ EVENTS := [Event_Id]Event {
 			},
 			{
 				text = "Read it by torchlight.",
+				requires = Requirement{.Reputation, 3},
 				result = "The torch is flattered by the attention.",
 				delta = #partial {.Flame = 1, .Livestock = -1},
 			},
@@ -298,6 +305,7 @@ EVENTS := [Event_Id]Event {
 			},
 			{
 				text = "Catch the bouquet.",
+				requires = Requirement{.Pride, 3},
 				result = "It was a torch. You are holding two torches now.",
 				delta = #partial {.Flame = 1, .Pride = -1},
 			},
@@ -325,6 +333,7 @@ EVENTS := [Event_Id]Event {
 			},
 			{
 				text = "Warm it by the torch.",
+				requires = Requirement{.Livestock, 3},
 				result = "The duck glows with approval. Then it melts a little.",
 				delta = #partial {.Flame = 1, .Livestock = -1},
 			},
@@ -347,6 +356,7 @@ EVENTS := [Event_Id]Event {
 			},
 			{
 				text = "Go along with Gil.",
+				requires = Requirement{.Reputation, 3},
 				result = "You walk behind the torch for once.",
 				delta = #partial {.Flame = 1, .Livestock = -1},
 			},
@@ -394,7 +404,7 @@ EVENTS := [Event_Id]Event {
 				text = "Bake your own.",
 				result = "You bake. The torch helps. Nobody asked it to.",
 				delta = #partial {.Flame = 1, .Snacks = 1, .Livestock = -2},
-				requires = Requirement{.Livestock, 2},
+				requires = Requirement{.Livestock, 3},
 			},
 		},
 	},
@@ -415,6 +425,7 @@ EVENTS := [Event_Id]Event {
 			},
 			{
 				text = "Warm it by the torch.",
+				requires = Requirement{.Livestock, 3},
 				result = "The heron approves. The pond does not.",
 				delta = #partial {.Flame = 1, .Livestock = -1},
 			},
@@ -458,6 +469,7 @@ EVENTS := [Event_Id]Event {
 			},
 			{
 				text = "Hold the torch up.",
+				requires = Requirement{.Pride, 3},
 				result = "The choir weeps. The torch takes the credit.",
 				delta = #partial {.Flame = 1, .Pride = -1},
 			},
@@ -482,7 +494,7 @@ EVENTS := [Event_Id]Event {
 				text = "Tax him back.",
 				result = "Nobody has tried this before. It works for an afternoon.",
 				delta = #partial {.Flame = 1, .Snacks = -1},
-				requires = Requirement{.Reputation, 2},
+				requires = Requirement{.Reputation, 3},
 			},
 		},
 	},
@@ -502,6 +514,7 @@ EVENTS := [Event_Id]Event {
 			},
 			{
 				text = "Hire a moth.",
+				requires = Requirement{.Snacks, 3},
 				result = "The moth is good at it. The moth is bad at it.",
 				delta = #partial {.Flame = 1, .Snacks = -1},
 			},
@@ -567,6 +580,7 @@ EVENTS := [Event_Id]Event {
 			},
 			{
 				text = "Ask the cart.",
+				requires = Requirement{.Snacks, 3},
 				result = "It says to follow the torch. Good cart.",
 				delta = #partial {.Flame = 1, .Snacks = -1},
 			},
@@ -588,6 +602,7 @@ EVENTS := [Event_Id]Event {
 			},
 			{
 				text = "Shout something useful.",
+				requires = Requirement{.Reputation, 3},
 				result = "Everyone hears it, including the cave.",
 				delta = #partial {.Flame = 1, .Reputation = -1},
 			},
@@ -609,6 +624,7 @@ EVENTS := [Event_Id]Event {
 			},
 			{
 				text = "Set the torch on it.",
+				requires = Requirement{.Snacks, 3},
 				result = "The stone is warm. The torch is quiet.",
 				delta = #partial {.Flame = 1, .Snacks = -1},
 			},
@@ -630,6 +646,7 @@ EVENTS := [Event_Id]Event {
 			},
 			{
 				text = "Take a bow.",
+				requires = Requirement{.Pride, 3},
 				result = "They clap. The torch brightens at the noise.",
 				delta = #partial {.Flame = 1, .Pride = -1},
 			},
