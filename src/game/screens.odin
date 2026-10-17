@@ -13,6 +13,9 @@ View :: struct {
 	line_count:   int,
 	choices:      [MAX_CHOICES]string,
 	choice_count: int,
+	torch:        int, // flame level to draw, or -1 for no torch
+	ruler:        [2]int, // tile of whoever holds the torch, or NO_TILE
+	choice_tiles: [MAX_CHOICES][2]int, // a face beside a choice, or NO_TILE
 }
 
 add_line :: proc(v: ^View, s: string) {
@@ -124,8 +127,33 @@ legacy_line :: proc(rec: Legacy_Record) -> string {
 	return fmt.tprintf("%s: %s.", how, holdings_text(items, grudges))
 }
 
+// The face of whoever holds the torch on this screen.
+ruler_tile :: proc(g: Game) -> [2]int {
+	switch g.screen {
+	case .Title:
+		return NO_TILE
+	case .Handover_Item, .Handover_Grudge, .Handoff:
+		return HEIR_TILES[g.heir] // the heir has been chosen
+	case .Event, .Result, .Heir, .Over:
+		return FOUNDER_TILE if g.generation <= 1 else HEIR_TILES[g.heir]
+	}
+	return NO_TILE
+}
+
 make_view :: proc(g: Game) -> View {
 	v: View
+	v.ruler = ruler_tile(g)
+	for i in 0 ..< MAX_CHOICES {
+		v.choice_tiles[i] = NO_TILE
+	}
+	switch g.screen {
+	case .Title:
+		v.torch = START_FLAME
+	case .Over:
+		v.torch = 0 if g.over == .Flame_Out else g.counters[.Flame]
+	case .Event, .Result, .Heir, .Handover_Item, .Handover_Grudge, .Handoff:
+		v.torch = g.counters[.Flame]
+	}
 	switch g.screen {
 	case .Title:
 		add_line(&v, "PASS THE TORCH")
@@ -194,6 +222,7 @@ make_view :: proc(g: Game) -> View {
 		add_line(&v, "The torch must go to someone. Who?")
 		for i in 0 ..< HEIR_CHOICES {
 			heir := HEIRS[g.candidates[i]]
+			v.choice_tiles[v.choice_count] = HEIR_TILES[g.candidates[i]]
 			add_choice(&v, fmt.tprintf("%s, %s (+%v, -%v)", heir.name, heir.trait, heir.plus, heir.minus))
 		}
 	case .Handover_Item:
@@ -247,11 +276,36 @@ make_view :: proc(g: Game) -> View {
 	return v
 }
 
-// Runs the transition for one visible choice. An out-of-range index does nothing.
-choose :: proc(g: ^Game, index: int) {
+// Runs the transition for one visible choice and says which sounds it earns. An out-of-range index does
+// nothing and is silent. The sounds are worked out from what changed, so they are not part of the game state.
+choose :: proc(g: ^Game, index: int) -> Sounds {
+	before := g^
+	if !apply_choice(g, index) {
+		return {}
+	}
+	flame_before, flame_now := before.counters[.Flame], g.counters[.Flame]
+	s: Sounds
+	switch {
+	case g.screen == .Over && before.screen != .Over:
+		s += {.Ending}
+	case g.screen == .Handoff && before.screen != .Handoff:
+		s += {.Handoff}
+	case flame_now < flame_before && flame_now > 0 && flame_now <= 1:
+		s += {.Flame_Low}
+	case flame_now < flame_before:
+		s += {.Flame_Down}
+	case flame_now > flame_before:
+		s += {.Flame_Up}
+	case:
+		s += {.Click}
+	}
+	return s
+}
+
+apply_choice :: proc(g: ^Game, index: int) -> bool {
 	v := make_view(g^)
 	if index < 0 || index >= v.choice_count {
-		return
+		return false
 	}
 	switch g.screen {
 	case .Title:
@@ -291,4 +345,5 @@ choose :: proc(g: ^Game, index: int) {
 	case .Handoff:
 		finish_handoff(g)
 	}
+	return true
 }

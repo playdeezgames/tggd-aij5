@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status
 
-Repo for **AI Browser Game Jam 5** (https://itch.io/jam/ai-jam-5). The chosen concept (an absurd menu-driven succession game, "Pass the Torch" as a working title) and its design rules, architecture, milestones and tests are in [PLAN.md](PLAN.md). Milestones 0 (scaffold), 1 (text-only dynasty loop, placeholder content) 2 (one-slot handoff with drift, carry cost, grudges losing their reason) and 3 (content pass: 25 events, 12 heirs, 8 items, 8 grudges, options gated by counters) and 4 (saves, and carry-over between runs) are done; the next is milestone 5 (torch glyph, heir portraits, sounds).
+Repo for **AI Browser Game Jam 5** (https://itch.io/jam/ai-jam-5). The chosen concept (an absurd menu-driven succession game, "Pass the Torch" as a working title) and its design rules, architecture, milestones and tests are in [PLAN.md](PLAN.md). Milestones 0 (scaffold), 1 (text-only dynasty loop, placeholder content) 2 (one-slot handoff with drift, carry cost, grudges losing their reason) and 3 (content pass: 25 events, 12 heirs, 8 items, 8 grudges, options gated by counters) 4 (saves, and carry-over between runs) and 5 (torch glyph, heir portraits, sounds) are done; the next is milestone 6 (playtest and balance).
 
 ## Commands
 
@@ -13,6 +13,7 @@ tools/test.sh                      # native odin test of src/game, plus a js_was
 tools/build.sh                     # builds build/web (ODIN_FLAGS="-o:size" for shipping)
 PORT=8093 tools/serve.sh           # serves build/web; wasm needs http, and the port must be free
 odin test src/game -collection:tggd=src -define:ODIN_TEST_THREADS=1 -define:ODIN_TEST_NAMES=game.title_begins_a_run   # one test
+tools/gen_sfx.sh                   # regenerates assets/sfx/*.wav (jsfxr in headless Chrome, deterministic; no node on this machine)
 tools/ship.sh                      # tests, size build, zip; pushes to itch only with --push
 ```
 
@@ -41,3 +42,7 @@ The user's notes vault is `/home/yermom/git/bok-of-splorr/splorr` (added as a wo
 A run draws 3 events per generation over 8 generations and never repeats one (`#assert` in `game.odin` keeps `Event_Id` large enough). Tests enforce: a flame-maximising policy always survives, random play survives between 2% and 70% of runs (it is about 32% at `START_FLAME` 3), and every event keeps at least two ungated options. Re-run `tools/test.sh` after any content or cost change; the survival rate is logged.
 
 New fields on `Game` need a matching change in `serialize_game`, `parse_game`, a validity range, and the round-trip and damaged-save tests. Test loops that pick random choices must pick 0 at the title, because choice 1 there is "Forget the past".
+
+## Art and sound
+
+Faces and nothing else come from the Urizen sheet (`assets/urizen.png`, CC0, vurmux; credit stays in the page footer and must go in the itch copy). `HEIR_TILES` in `content.odin` gives each heir a (column, row); the page draws tiles at 12 px with a 1 px gap and offset. The torch is drawn procedurally in the page from the flame level, which `make_view` supplies (`View.torch`, `View.ruler`, `View.choice_tiles`). `choose` returns a `Sounds` bit set worked out from what changed (not stored in `Game`); `game.Sound` order must match `SOUND_FILES` in `web/index.html`, and `tools/test.sh` checks that and that the assets exist. Browsers keep audio off until a key or pointer event, so the page unlocks and decodes on the first one; a synthetic `.click()` does not unlock it.

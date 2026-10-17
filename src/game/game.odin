@@ -100,6 +100,18 @@ Legacy_Kind :: enum {
 	Item,
 }
 
+// Sounds the page can play. The page loads assets/sfx/<lower-case name>.wav, in this order (tools/test.sh checks it).
+Sound :: enum {
+	Click,
+	Flame_Up,
+	Flame_Down,
+	Handoff,
+	Flame_Low,
+	Ending,
+}
+
+Sounds :: bit_set[Sound]
+
 Screen :: enum {
 	Title,
 	Event,

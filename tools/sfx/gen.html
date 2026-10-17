@@ -1,0 +1,40 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>sfx generator</title>
+<pre id="out">pending</pre>
+<script src="riffwave.js"></script>
+<script src="sfxr.js"></script>
+<script>
+	// Renders the game's sound effects with jsfxr (vendored beside this file, Unlicense). tools/gen_sfx.sh loads this page
+	// in headless Chrome and decodes the base64 WAVs from #out. Math.random is seeded before every sound, so the same
+	// table always gives the same files.
+	function seeded(seed) {
+		let a = seed >>> 0;
+		return function () {
+			a = (a + 0x6D2B79F5) >>> 0;
+			let t = a;
+			t = Math.imul(t ^ (t >>> 15), t | 1);
+			t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+			return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+		};
+	}
+	// name -> [preset, seed, overrides applied after the preset rolls its random numbers]. The names are the
+	// lower-case names of game.Sound, in the same order as SOUND_FILES in web/index.html.
+	const SOUNDS = {
+		click:      ["blipSelect", 201, { p_env_decay: 0.12, sound_vol: 0.12 }],
+		flame_up:   ["powerUp",    202, { p_env_sustain: 0.12, p_env_decay: 0.3, sound_vol: 0.12 }],
+		flame_down: ["hitHurt",    203, { p_base_freq: 0.22, p_env_decay: 0.3, sound_vol: 0.14 }],
+		handoff:    ["pickupCoin", 204, { wave_type: 2, p_arp_mod: 0.45, p_arp_speed: 0.45, p_env_sustain: 0.2, p_env_decay: 0.45, sound_vol: 0.14 }],
+		flame_low:  ["tone",       205, { p_base_freq: 0.3, p_vib_strength: 0.3, p_vib_speed: 0.5, p_env_sustain: 0.25, p_env_decay: 0.4, sound_vol: 0.12 }],
+		ending:     ["explosion",  206, { p_env_sustain: 0.2, p_env_decay: 0.6, p_base_freq: 0.14, sound_vol: 0.15 }],
+	};
+	const api = jsfxr.sfxr;
+	const out = {};
+	for (const [name, [preset, seed, overrides]] of Object.entries(SOUNDS)) {
+		Math.random = seeded(seed);
+		const p = api.generate(preset);
+		Object.assign(p, overrides);
+		out[name] = api.toWave(p).dataURI.split(",")[1];
+	}
+	document.getElementById("out").textContent = JSON.stringify(out);
+</script>

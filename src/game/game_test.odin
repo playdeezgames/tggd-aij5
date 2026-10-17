@@ -1,6 +1,7 @@
 #+build !js
 package game
 
+import "core:fmt"
 import "core:log"
 import "core:strings"
 import "core:testing"
@@ -331,4 +332,103 @@ content_is_well_formed :: proc(t: ^testing.T) {
 	}
 	testing.expect(t, len(Event_Id) > EVENTS_PER_GENERATION)
 	testing.expect(t, len(Heir_Id) >= HEIR_CHOICES)
+}
+
+@(test)
+every_choice_earns_one_matching_sound :: proc(t: ^testing.T) {
+	// Flame up and down: Rain option 0 (shelter the hat, +1 flame) and option 1 (pray, -1 flame).
+	g := new_game(3)
+	choose(&g, 0)
+	g.counters[.Flame] = 5
+	g.event = .Rain
+	g2 := g
+	testing.expect_value(t, choose(&g, 0), Sounds{.Flame_Up})
+	testing.expect_value(t, choose(&g, 0), Sounds{.Click}) // the result screen
+	g2.event = .Rain
+	testing.expect_value(t, choose(&g2, 1), Sounds{.Flame_Down})
+
+	// Dropping to the last flame warns instead.
+	g3 := new_game(3)
+	choose(&g3, 0)
+	g3.counters[.Flame] = 2
+	g3.event = .Rain
+	testing.expect_value(t, choose(&g3, 1), Sounds{.Flame_Low})
+
+	// Running out of flame ends the run with the ending sound.
+	g4 := new_game(3)
+	choose(&g4, 0)
+	g4.counters[.Flame] = 1
+	g4.event = .Rain
+	choose(&g4, 1)
+	testing.expect_value(t, choose(&g4, 0), Sounds{.Ending})
+
+	// An out-of-range choice is silent and changes nothing.
+	before := g4
+	testing.expect_value(t, choose(&g4, 9), Sounds{})
+	testing.expect(t, before == g4)
+
+	// A handoff has its own sound.
+	g5 := new_game(3)
+	choose(&g5, 0)
+	g5.heir = .Odo
+	g5.carry_item = nil
+	g5.carry_grudge = nil
+	g5.screen = .Handover_Grudge // nothing held: the choice is "hand over nothing"
+	testing.expect_value(t, choose(&g5, 0), Sounds{.Handoff})
+	free_all(context.temp_allocator)
+}
+
+@(test)
+sound_names_match_the_files_the_page_loads :: proc(t: ^testing.T) {
+	names := [?]string{"click", "flame_up", "flame_down", "handoff", "flame_low", "ending"}
+	testing.expect_value(t, len(names), len(Sound))
+	for s in Sound {
+		testing.expect_value(t, strings.to_lower(fmt.tprintf("%v", s), context.temp_allocator), names[int(s)])
+	}
+	free_all(context.temp_allocator)
+}
+
+@(test)
+the_scene_follows_the_game :: proc(t: ^testing.T) {
+	g := new_game(5)
+	testing.expect_value(t, make_view(g).ruler, NO_TILE)
+	choose(&g, 0)
+	v := make_view(g)
+	testing.expect_value(t, v.torch, START_FLAME)
+	testing.expect_value(t, v.ruler, FOUNDER_TILE)
+	for i in 0 ..< MAX_CHOICES {
+		testing.expect_value(t, v.choice_tiles[i], NO_TILE)
+	}
+	// every heir choice has a distinct face; the outgoing ruler is still shown while choosing
+	g.screen = .Heir
+	offer_heirs(&g)
+	v = make_view(g)
+	testing.expect_value(t, v.ruler, FOUNDER_TILE)
+	for i in 0 ..< HEIR_CHOICES {
+		testing.expect_value(t, v.choice_tiles[i], HEIR_TILES[g.candidates[i]])
+	}
+	// once chosen, the new heir holds the torch
+	choose(&g, 1)
+	testing.expect_value(t, make_view(g).ruler, HEIR_TILES[g.heir])
+	// a dead torch is drawn as out
+	g.screen = .Over
+	g.over = .Flame_Out
+	testing.expect_value(t, make_view(g).torch, 0)
+	free_all(context.temp_allocator)
+}
+
+@(test)
+heir_faces_are_distinct_and_on_the_sheet :: proc(t: ^testing.T) {
+	SHEET_COLUMNS :: 206
+	SHEET_ROWS :: 50
+	seen: [dynamic][2]int
+	defer delete(seen)
+	for tile in HEIR_TILES {
+		testing.expect(t, tile.x >= 0 && tile.x < SHEET_COLUMNS && tile.y >= 0 && tile.y < SHEET_ROWS)
+		testing.expect(t, tile != FOUNDER_TILE)
+		for other in seen {
+			testing.expect(t, tile != other)
+		}
+		append(&seen, tile)
+	}
 }

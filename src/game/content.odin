@@ -674,3 +674,23 @@ LEGACY_OPTIONS := [Legacy_Kind][3]Option {
 		{text = "Hold it to the torch.", result = "The torch is interested. The item is less so.", delta = #partial {.Flame = 1, .Livestock = -1}},
 	},
 }
+
+// Urizen 1-bit tile (column, row) for each face. Tiles are 12 px with a 1 px gap and a 1 px offset; the page draws
+// them. Each row of the people section is one colour, each column one figure.
+NO_TILE :: [2]int{-1, -1}
+FOUNDER_TILE :: [2]int{105, 0}
+
+HEIR_TILES := [Heir_Id][2]int {
+	.Brindle      = {109, 4},
+	.Odo          = {106, 5},
+	.Pim          = {118, 11},
+	.Aunt_Vex     = {117, 17},
+	.Moss         = {108, 8},
+	.Dame_Wren    = {120, 6},
+	.Tobin        = {124, 10},
+	.Little_Sorrel = {104, 7},
+	.Gus          = {113, 15},
+	.Marigold     = {111, 14},
+	.Third_Cousin = {122, 2},
+	.Hob          = {126, 18},
+}

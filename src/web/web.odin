@@ -11,7 +11,12 @@ foreign host {
 	// The page rebuilds its DOM from these calls. Strings cross as pointer and length.
 	dom_clear :: proc() ---
 	dom_line :: proc(text: [^]u8, length: i32) ---
-	dom_choice :: proc(text: [^]u8, length: i32) ---
+	// The torch to draw (flame level, or -1 for none) and the face of whoever holds it (tile column and row, or -1).
+	dom_scene :: proc(torch: i32, tile_col: i32, tile_row: i32) ---
+	// A choice, with an optional face beside it (tile column and row, or -1).
+	dom_choice :: proc(text: [^]u8, length: i32, tile_col: i32, tile_row: i32) ---
+	// Plays assets/sfx/<name>.wav for the game.Sound with this position.
+	play_sound :: proc(id: i32) ---
 	// Milliseconds since the epoch, as f64 (an i64 import would need a BigInt on the JS side).
 	now_ms :: proc() -> f64 ---
 	// localStorage. storage_get returns the value's byte length, or -1 when the key is missing, unreadable or
@@ -73,13 +78,14 @@ load_saves :: proc() {
 redraw :: proc() {
 	v := game.make_view(state)
 	dom_clear()
+	dom_scene(i32(v.torch), i32(v.ruler.x), i32(v.ruler.y))
 	for i in 0 ..< v.line_count {
 		s := v.lines[i]
 		dom_line(raw_data(s), i32(len(s)))
 	}
 	for i in 0 ..< v.choice_count {
 		s := v.choices[i]
-		dom_choice(raw_data(s), i32(len(s)))
+		dom_choice(raw_data(s), i32(len(s)), i32(v.choice_tiles[i].x), i32(v.choice_tiles[i].y))
 	}
 	free_all(context.temp_allocator)
 }
@@ -98,7 +104,10 @@ step :: proc(dt: f64, c: runtime.Context) -> bool {
 @(export)
 on_choice :: proc "c" (index: i32) {
 	context = runtime.default_context()
-	game.choose(&state, int(index))
+	sounds := game.choose(&state, int(index))
+	for sound in sounds {
+		play_sound(i32(sound))
+	}
 	save_all()
 	redraw()
 }
