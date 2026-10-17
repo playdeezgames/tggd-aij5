@@ -1,6 +1,7 @@
 #+build !js
 package game
 
+import "core:log"
 import "core:strings"
 import "core:testing"
 
@@ -35,9 +36,11 @@ play :: proc(t: ^testing.T, seed: u64, policy: Policy) -> Game {
 		case .Greedy_Flame:
 			#partial switch g.screen {
 			case .Event:
-				best := EVENTS[g.event].options[0].delta[.Flame]
-				for i in 1 ..< EVENTS[g.event].option_count {
-					if d := EVENTS[g.event].options[i].delta[.Flame]; d > best {
+				open: [3]int
+				n := available_options(g, &open)
+				best := EVENTS[g.event].options[open[0]].delta[.Flame]
+				for i in 1 ..< n {
+					if d := EVENTS[g.event].options[open[i]].delta[.Flame]; d > best {
 						best = d
 						pick = i
 					}
@@ -243,15 +246,76 @@ non_flame_counters_reset_at_handover :: proc(t: ^testing.T) {
 }
 
 @(test)
+no_event_repeats_within_a_run :: proc(t: ^testing.T) {
+	for seed in u64(0) ..< 200 {
+		g := new_game(seed)
+		seen: bit_set[Event_Id]
+		was_event := false
+		for _ in 0 ..< MAX_STEPS {
+			if g.screen == .Over {
+				break
+			}
+			is_event := g.screen == .Event
+			if is_event && !was_event { 	// a new event just began
+				testing.expectf(t, g.event not_in seen, "seed %d repeated %v", seed, g.event)
+				seen += {g.event}
+			}
+			was_event = is_event
+			v := make_view(g)
+			choose(&g, roll(&g, v.choice_count))
+			free_all(context.temp_allocator)
+		}
+	}
+}
+
+@(test)
+requirements_hide_options_until_met :: proc(t: ^testing.T) {
+	g := new_game(4)
+	choose(&g, 0)
+	g.event = .Permit // option 2 (Bribe with cheese) needs 2 Snacks
+	g.counters[.Snacks] = 1
+	open: [3]int
+	testing.expect_value(t, available_options(g, &open), 2)
+	g.counters[.Snacks] = 2
+	testing.expect_value(t, available_options(g, &open), 3)
+	free_all(context.temp_allocator)
+}
+
+@(test)
+survival_rate_for_random_play_is_reasonable :: proc(t: ^testing.T) {
+	// Guardrail on balance, not a spec: random play should neither always die nor always win.
+	survived := 0
+	total := 1000
+	for seed in u64(0) ..< u64(total) {
+		g := play(t, seed, .Random)
+		if g.over == .Dynasty_End {
+			survived += 1
+		}
+	}
+	log.infof("random play survived %d of %d runs", survived, total)
+	testing.expect(t, survived * 100 >= total * 2)
+	testing.expect(t, survived * 100 <= total * 70)
+}
+
+@(test)
 content_is_well_formed :: proc(t: ^testing.T) {
 	for event in EVENTS {
 		testing.expect(t, len(event.prompt) > 0 && len(event.prompt) <= 80)
 		testing.expect(t, event.option_count >= 2 && event.option_count <= len(event.options))
+		ungated := 0
 		for i in 0 ..< event.option_count {
 			o := event.options[i]
+			if o.requires == nil {
+				ungated += 1
+			}
 			testing.expect(t, len(o.text) > 0 && len(o.text) <= 40)
 			testing.expect(t, len(o.result) > 0 && len(o.result) <= 80)
 		}
+		testing.expect(t, ungated >= 2) // a player is never left with a single choice
+	}
+	for heir in HEIRS {
+		testing.expect(t, heir.plus != heir.minus)
+		testing.expect(t, len(heir.name) > 0 && len(heir.trait) > 0)
 	}
 	testing.expect(t, len(STATUS_LADDER) >= MAX_GENERATIONS && len(INTENSITY_LADDER) >= MAX_GENERATIONS)
 	for id in Item_Id {

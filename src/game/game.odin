@@ -2,7 +2,7 @@
 // The clock never appears here; the only outside input is the seed given to new_game.
 package game
 
-START_FLAME :: 6
+START_FLAME :: 3
 START_COUNTER :: 3
 COUNTER_MAX :: 9
 HANDOFF_COST :: 1 // every handoff costs this much flame, whatever you carry
@@ -23,6 +23,11 @@ Item_Id :: enum {
 	Goat_Chewed_Map,
 	Soggy_Hat,
 	Ladle,
+	Borrowed_Bucket,
+	Heirloom_Cheese,
+	Pocket_Sundial,
+	Wedding_Boot,
+	Rubber_Duck,
 }
 
 Grudge_Id :: enum {
@@ -30,6 +35,10 @@ Grudge_Id :: enum {
 	Stranger,
 	Neighbors,
 	Sky,
+	Cousin,
+	Mayor,
+	Bakery,
+	Heron,
 }
 
 Event_Id :: enum {
@@ -38,13 +47,44 @@ Event_Id :: enum {
 	Loud_Neighbors,
 	Rain,
 	Feast,
+	Bucket_Loan,
+	Cheese_Heirloom,
+	Sundial_Seller,
+	Wedding,
+	Duck,
+	Cousin_Gil,
+	Permit,
+	Baker,
+	Heron,
+	Fence,
+	Choir,
+	Tax_Man,
+	Moths,
+	Bridge,
+	Rumor,
+	Snack_Cart,
+	Echo,
+	Stone,
+	Bell,
+	Hill,
 }
+
+// A run draws EVENTS_PER_GENERATION events per generation and never repeats one, so there must be enough.
+#assert(len(Event_Id) >= MAX_GENERATIONS * EVENTS_PER_GENERATION)
 
 Heir_Id :: enum {
 	Brindle,
 	Odo,
 	Pim,
 	Aunt_Vex,
+	Moss,
+	Dame_Wren,
+	Tobin,
+	Little_Sorrel,
+	Gus,
+	Marigold,
+	Third_Cousin,
+	Hob,
 }
 
 Over_Reason :: enum {
@@ -81,7 +121,7 @@ Game :: struct {
 	left_items:    [Item_Id]Held, // what the last handoff did not carry, for the Handoff screen
 	left_grudges:  [Grudge_Id]Held,
 	handoff_cost:  int,
-	events_seen:   bit_set[Event_Id], // this generation only, so no event repeats within one
+	events_seen:   bit_set[Event_Id], // this run, so no event repeats within one
 	events_left:   int,
 	event:         Event_Id,
 	last_option:   int,
@@ -130,11 +170,11 @@ start_run :: proc(g: ^Game) {
 	g.grudges = {}
 	g.carry_item = nil
 	g.carry_grudge = nil
+	g.events_seen = {}
 	begin_generation(g)
 }
 
 begin_generation :: proc(g: ^Game) {
-	g.events_seen = {}
 	g.events_left = EVENTS_PER_GENERATION
 	begin_event(g)
 }
@@ -148,7 +188,14 @@ begin_event :: proc(g: ^Game) {
 			n += 1
 		}
 	}
-	// EVENTS_PER_GENERATION is below the number of events, so at least one is always unseen.
+	// The #assert above means a run cannot use them all up; the reset is only a guard.
+	if n == 0 {
+		g.events_seen = {}
+		for e in Event_Id {
+			unseen[n] = e
+			n += 1
+		}
+	}
 	g.event = unseen[roll(g, n)]
 	g.events_seen += {g.event}
 	g.screen = .Event
@@ -160,6 +207,27 @@ apply_delta :: proc(g: ^Game, delta: [Counter]int) {
 	}
 }
 
+option_available :: proc(g: Game, o: Option) -> bool {
+	if r, ok := o.requires.?; ok {
+		return g.counters[r.counter] >= r.at_least
+	}
+	return true
+}
+
+// The indexes (into the event's options) the player can pick right now. Unavailable options are left out.
+available_options :: proc(g: Game, out: ^[3]int) -> int {
+	event := EVENTS[g.event]
+	n := 0
+	for i in 0 ..< event.option_count {
+		if option_available(g, event.options[i]) {
+			out[n] = i
+			n += 1
+		}
+	}
+	return n
+}
+
+// `index` is an index into the event's options, as given by available_options.
 choose_option :: proc(g: ^Game, index: int) {
 	option := EVENTS[g.event].options[index]
 	apply_delta(g, option.delta)

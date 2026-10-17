@@ -122,8 +122,10 @@ make_view :: proc(g: Game) -> View {
 		}
 		event := EVENTS[g.event]
 		add_line(&v, event.prompt)
-		for i in 0 ..< event.option_count {
-			add_choice(&v, event.options[i].text)
+		open: [3]int
+		n := available_options(g, &open)
+		for i in 0 ..< n {
+			add_choice(&v, event.options[open[i]].text)
 		}
 	case .Result:
 		option := EVENTS[g.event].options[g.last_option]
@@ -202,7 +204,9 @@ choose :: proc(g: ^Game, index: int) {
 	case .Title, .Over:
 		start_run(g)
 	case .Event:
-		choose_option(g, index)
+		open: [3]int
+		_ = available_options(g^, &open)
+		choose_option(g, open[index])
 	case .Result:
 		finish_result(g)
 	case .Heir:
