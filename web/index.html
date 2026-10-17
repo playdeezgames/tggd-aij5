@@ -5,24 +5,46 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pass the Torch</title>
 <style>
-	html, body { margin: 0; background: #000; color: #ddd; font-family: monospace; }
+	html, body { margin: 0; background: #000; color: #ddd; font-family: monospace; font-size: 18px; }
 	main { max-width: 40rem; margin: 0 auto; padding: 1rem; }
-	#view { white-space: pre-wrap; }
+	p { margin: 0 0 0.75rem; }
+	p:first-child { color: #fa0; }
+	button { display: block; width: 100%; margin: 0 0 0.5rem; padding: 0.6rem; text-align: left;
+		font: inherit; color: #ddd; background: #222; border: 1px solid #555; cursor: pointer; }
+	button:hover, button:focus { background: #333; border-color: #fa0; outline: none; }
 </style>
 </head>
 <body>
-<main>
-	<div id="view">Loading...</div>
-</main>
+<main id="view">Loading...</main>
 <script type="text/javascript" src="odin.js"></script>
 <script type="text/javascript">
 	const memory = new odin.WasmMemoryInterface();
 	const view = document.getElementById("view");
+	let choices = 0;
 	const imports = {
 		env: {
-			dom_set_text: (ptr, len) => { view.textContent = memory.loadString(ptr, len); },
+			dom_clear: () => { view.replaceChildren(); choices = 0; },
+			dom_line: (ptr, len) => {
+				const p = document.createElement("p");
+				p.textContent = memory.loadString(ptr, len);
+				view.appendChild(p);
+			},
+			dom_choice: (ptr, len) => {
+				const index = choices++;
+				const b = document.createElement("button");
+				b.textContent = (index + 1) + ". " + memory.loadString(ptr, len);
+				b.addEventListener("click", () => memory.exports.on_choice(index));
+				view.appendChild(b);
+				if (index === 0) b.focus();
+			},
+			now_ms: () => Date.now(),
 		},
 	};
+	// Number keys pick a choice, so the game plays from the keyboard.
+	window.addEventListener("keydown", (e) => {
+		const n = parseInt(e.key, 10);
+		if (n >= 1 && n <= choices) { e.preventDefault(); memory.exports.on_choice(n - 1); }
+	});
 	odin.runWasm("game.wasm", null, imports, memory);
 </script>
 </body>
