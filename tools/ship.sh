@@ -3,14 +3,14 @@
 # anything. Usage: tools/ship.sh [--push]
 set -euo pipefail
 cd "$(dirname "$0")/.."
-# The page: not created yet. TARGET is a placeholder until the itch page exists; set the real slug before any --push.
-TARGET="thegrumpygamedev/pass-the-torch-of-splorr:html"
-ZIP="build/pass-the-torch-html5.zip"
+# The page: https://thegrumpygamedev.itch.io/torch-passers-of-splorr (confirmed by the user).
+TARGET="thegrumpygamedev/torch-passers-of-splorr:html"
+ZIP="build/torch-passers-html5.zip"
 
 tools/test.sh
 ODIN_FLAGS="-o:size" tools/build.sh
 rm -f "$ZIP"
-(cd build/web && zip -q -9 -r "../pass-the-torch-html5.zip" .)
+(cd build/web && zip -q -9 -r "../torch-passers-html5.zip" .)
 echo "zip: $ZIP ($(du -h "$ZIP" | cut -f1)); wasm $(du -h build/web/game.wasm | cut -f1)"
 unzip -l "$ZIP" | tail -5
 

@@ -1,6 +1,6 @@
-# Pass the Torch: dev plan
+# Torch Passers of SPLORR!!: dev plan
 
-Working title. An absurd, menu-driven succession game: a dynasty of 8 to 12 generations, one literal torch, and one item plus one grudge handed over each time. Decisions so far: template drift for distortion, full carry-over between runs, absurd tone, flickering torch glyph + 1-bit heir portraits + jsfxr sounds.
+An absurd, menu-driven succession game: a dynasty of 8 to 12 generations, one literal torch, and one item plus one grudge handed over each time. Decisions so far: template drift for distortion, full carry-over between runs, absurd tone, flickering torch glyph + 1-bit heir portraits + jsfxr sounds.
 
 **Deadline:** jam closes 2026-10-31 03:00 (confirm the time zone on the page; plan to be uploaded by the evening of Oct 30). Today is Oct 17.
 

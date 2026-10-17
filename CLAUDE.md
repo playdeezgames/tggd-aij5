@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status
 
-Repo for **AI Browser Game Jam 5** (https://itch.io/jam/ai-jam-5). The chosen concept (an absurd menu-driven succession game, "Pass the Torch" as a working title) and its design rules, architecture, milestones and tests are in [PLAN.md](PLAN.md). Milestones 0 (scaffold), 1 (text-only dynasty loop, placeholder content) 2 (one-slot handoff with drift, carry cost, grudges losing their reason) and 3 (content pass: 25 events, 12 heirs, 8 items, 8 grudges, options gated by counters) 4 (saves, and carry-over between runs) 5 (torch glyph, heir portraits, sounds) and 6 (playtest and balance) are done; the next is milestone 7 (ship material: itch copy, cover, screenshots, devlog).
+Repo for **AI Browser Game Jam 5** (https://itch.io/jam/ai-jam-5). The chosen concept (an absurd menu-driven succession game, "Torch Passers of SPLORR!!") and its design rules, architecture, milestones and tests are in [PLAN.md](PLAN.md). Milestones 0 (scaffold), 1 (text-only dynasty loop, placeholder content) 2 (one-slot handoff with drift, carry cost, grudges losing their reason) and 3 (content pass: 25 events, 12 heirs, 8 items, 8 grudges, options gated by counters) 4 (saves, and carry-over between runs) 5 (torch glyph, heir portraits, sounds) 6 (playtest and balance) and 7 (ship material: itch copy, cover, screenshots, devlog) are done; what is left is human playtesting, editing the content, and shipping when the user says so.
 
 ## Commands
 
@@ -14,6 +14,8 @@ tools/build.sh                     # builds build/web (ODIN_FLAGS="-o:size" for 
 PORT=8093 tools/serve.sh           # serves build/web; wasm needs http, and the port must be free
 odin test src/game -collection:tggd=src -define:ODIN_TEST_THREADS=1 -define:ODIN_TEST_NAMES=game.title_begins_a_run   # one test
 tools/gen_sfx.sh                   # regenerates assets/sfx/*.wav (jsfxr in headless Chrome, deterministic; no node on this machine)
+tools/make_screenshots.sh          # assets/screenshots via headless Chrome and the page's ?seed=&keys= QA params (needs tools/serve.sh running)
+python3 tools/make_cover.py        # assets/cover.png (630x500) from the game's own art
 tools/ship.sh                      # tests, size build, zip; pushes to itch only with --push
 ```
 

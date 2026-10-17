@@ -154,7 +154,7 @@ make_view :: proc(g: Game) -> View {
 	}
 	switch g.screen {
 	case .Title:
-		add_line(&v, "PASS THE TORCH")
+		add_line(&v, "TORCH PASSERS OF SPLORR!!")
 		add_line(&v, "You have a torch. It does not stay yours.")
 		if g.legacy.count > 0 {
 			add_line(&v, "Remembered from past dynasties:")

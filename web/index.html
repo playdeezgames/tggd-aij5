@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pass the Torch</title>
+<title>Torch Passers of SPLORR!!</title>
 <style>
 	html, body { margin: 0; background: #000; color: #ddd; font-family: monospace; font-size: 18px; }
 	main { max-width: 40rem; margin: 0 auto; padding: 1rem; }
@@ -157,7 +157,8 @@
 				if (index === 0) b.focus();
 			},
 			play_sound: (id) => { if (actx && buffers[id]) play(id); else if (!muted && queued.length < 4) queued.push(id); },
-			now_ms: () => Date.now(),
+			// QA only: ?seed=N makes the game's randomness repeatable.
+			now_ms: () => { const s = new URLSearchParams(location.search).get("seed"); return s !== null ? Number(s) : Date.now(); },
 			// localStorage can be missing or throw (private windows, blocked site data): the game still plays.
 			storage_get: (kp, kl, bp, cap) => {
 				try {
@@ -182,7 +183,11 @@
 		const n = parseInt(e.key, 10);
 		if (n >= 1 && n <= choices) { e.preventDefault(); memory.exports.on_choice(n - 1); }
 	});
-	odin.runWasm("game.wasm", null, imports, memory);
+	odin.runWasm("game.wasm", null, imports, memory).then(() => {
+		// QA only: ?keys=1,1,2 plays those choices (1-based) after load. Used to reproduce screens for the screenshots.
+		const keys = new URLSearchParams(location.search).get("keys");
+		if (keys) for (const k of keys.split(",")) memory.exports.on_choice(parseInt(k, 10) - 1);
+	});
 </script>
 </body>
 </html>

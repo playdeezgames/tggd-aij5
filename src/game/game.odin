@@ -1,4 +1,4 @@
-// Pure rules for Pass the Torch. No platform imports: this package compiles natively (for tests) and to wasm.
+// Pure rules for Torch Passers of SPLORR!!. No platform imports: this package compiles natively (for tests) and to wasm.
 // The clock never appears here; the only outside input is the seed given to new_game.
 package game
 
