@@ -79,6 +79,7 @@ GRUDGE_TARGETS := [Grudge_Id][NOUN_RUNGS]string {
 	.Mayor = {"the mayor", "the mayor's office", "officials", "stamps"},
 	.Bakery = {"the baker", "the bakery", "bread", "yeast"},
 	.Heron = {"the heron", "herons", "tall birds", "knees"},
+	.Tax_Man = {"the tax man", "tax men", "clipboards", "receipts"},
 }
 
 GRUDGE_REASONS := [Grudge_Id]string {
@@ -90,6 +91,7 @@ GRUDGE_REASONS := [Grudge_Id]string {
 	.Mayor = "the permit",
 	.Bakery = "a short loaf",
 	.Heron = "staring at the pond",
+	.Tax_Man = "taxing the torch anyway",
 }
 
 HEIRS := [Heir_Id]Heir {
@@ -488,7 +490,7 @@ EVENTS := [Event_Id]Event {
 				text = "Argue.",
 				result = "You argue well. He agrees. He taxes you anyway.",
 				delta = #partial {.Pride = 1, .Reputation = -1},
-				grudge = .Mayor,
+				grudge = .Tax_Man,
 			},
 			{
 				text = "Tax him back.",

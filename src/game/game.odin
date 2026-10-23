@@ -40,6 +40,7 @@ Grudge_Id :: enum {
 	Mayor,
 	Bakery,
 	Heron,
+	Tax_Man,
 }
 
 Event_Id :: enum {
@@ -317,11 +318,16 @@ finish_result :: proc(g: ^Game) {
 
 offer_heirs :: proc(g: ^Game) {
 	pool: [len(Heir_Id)]Heir_Id
+	n := 0
 	for h in Heir_Id {
-		pool[int(h)] = h
+		if g.generation > 1 && h == g.heir {
+			continue // the founder is no Heir_Id, but every later ruler cannot succeed themselves
+		}
+		pool[n] = h
+		n += 1
 	}
 	for i in 0 ..< HEIR_CHOICES { 	// partial Fisher-Yates: the first HEIR_CHOICES entries are distinct
-		j := i + roll(g, len(pool) - i)
+		j := i + roll(g, n - i)
 		pool[i], pool[j] = pool[j], pool[i]
 		g.candidates[i] = pool[i]
 	}

@@ -521,3 +521,22 @@ the_end_shows_only_what_will_be_remembered :: proc(t: ^testing.T) {
 	testing.expect(t, strings.contains(text, "grudge against the sky"))
 	free_all(context.temp_allocator)
 }
+
+@(test)
+a_ruler_is_never_offered_as_their_own_heir :: proc(t: ^testing.T) {
+	for seed in u64(0) ..< 200 {
+		g := new_game(seed)
+		for _ in 0 ..< MAX_STEPS {
+			if g.screen == .Heir && g.generation > 1 {
+				for c in g.candidates {
+					testing.expectf(t, c != g.heir, "seed %d offered the ruler %v", seed, c)
+				}
+			}
+			if g.screen == .Over {
+				break
+			}
+			choose(&g, 0)
+			free_all(context.temp_allocator)
+		}
+	}
+}
