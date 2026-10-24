@@ -53,38 +53,70 @@ def main():
     sheet = Image.open("assets/urizen.png").convert("RGBA")
     face = lambda c, r: sheet.crop((13 * c + 1, 13 * r + 1, 13 * c + 13, 13 * r + 13))
     font = "tools/cover/PublicPixel.ttf"
-    cover = Image.new("RGBA", (630, 500), (0, 0, 0, 255))
+    from PIL import ImageFilter, ImageEnhance
+    cover = Image.new("RGBA", (630, 500), (6, 4, 4, 255))
 
-    def centered(img, y, dx=0):
-        cover.alpha_composite(img, ((630 - img.width) // 2 + dx, y))
-
-    # a soft glow behind the flame, then the torch at 4x
+    # a smooth glow behind the flame
     glow = Image.new("RGBA", (630, 500), (0, 0, 0, 0))
     gd = ImageDraw.Draw(glow)
-    for r, a in ((190, 14), (150, 20), (110, 28), (70, 40)):
-        gd.ellipse((315 - r, 255 - r, 315 + r, 255 + r), fill=(255, 120, 20, a))
+    gd.ellipse((315 - 230, 270 - 230, 315 + 230, 270 + 230), fill=(255, 110, 20, 110))
+    gd.ellipse((315 - 120, 250 - 120, 315 + 120, 250 + 120), fill=(255, 170, 40, 120))
+    glow = glow.filter(ImageFilter.GaussianBlur(60))
     cover.alpha_composite(glow)
-    t = torch(8, 5).resize((160, 320), Image.NEAREST)
-    centered(t, 98)
 
-    shadow = lettering(font, "TORCH PASSERS", 40, (0, 0, 0))
-    main_text = lettering(font, "TORCH PASSERS", 40, (255, 255, 255))
-    x = (630 - main_text.width) // 2
-    cover.alpha_composite(shadow, (x + 4, 24 + 4))
-    cover.alpha_composite(main_text, (x, 24))
-    sub = lettering(font, "of SPLORR!!", 24, ORANGE)
-    sub_shadow = lettering(font, "of SPLORR!!", 24, (0, 0, 0))
-    sx = (630 - sub.width) // 2
-    cover.alpha_composite(sub_shadow, (sx + 3, 72 + 3))
-    cover.alpha_composite(sub, (sx, 72))
+    # sparks drifting up from the flame
+    sp = Image.new("RGBA", (630, 500), (0, 0, 0, 0))
+    sd = ImageDraw.Draw(sp)
+    for i in range(46):
+        ang = noise(i * 3.7)
+        x = 315 + int((noise(i * 5.1) - 0.5) * 150 * (0.4 + ang))
+        y = 270 - int(noise(i * 9.3) * 190)
+        sz = 3 if noise(i * 1.9) > 0.6 else 2
+        col = (255, 220, 90) if noise(i * 2.3) > 0.5 else (255, 140, 30)
+        sd.rectangle((x, y, x + sz - 1, y + sz - 1), fill=col + (255,))
+    cover.alpha_composite(sp)
 
-    # the family, in a row, each one a little worse for wear
+    # the family queues up either side, lit less the further from the flame
     faces = [FOUNDER] + HEIRS[:11]
-    scale, gap = 4, 3
-    total = len(faces) * 12 * scale + (len(faces) - 1) * gap
-    x0 = (630 - total) // 2
-    for i, (c, r) in enumerate(faces):
-        cover.alpha_composite(face(c, r).resize((12 * scale, 12 * scale), Image.NEAREST), (x0 + i * (12 * scale + gap), 428))
+    scale = 6
+    slots = []
+    for side in (-1, 1):
+        for col in range(2):
+            for row in range(3):
+                x = 315 + side * (150 + col * 82) - (72 if side < 0 else 0) + (0 if side < 0 else 0)
+                y = 130 + row * 108 + col * 40
+                slots.append((x, y, col))
+    for i, (x, y, col) in enumerate(slots):
+        c, r = faces[i % len(faces)]
+        f = face(c, r).resize((12 * scale, 12 * scale), Image.NEAREST)
+        f = ImageEnhance.Brightness(f).enhance(1.0 if col == 0 else 0.55)
+        back = Image.new("RGBA", f.size, (30, 18, 14, 255))
+        cover.alpha_composite(back, (x, y))
+        cover.alpha_composite(f, (x, y))
+
+    # vignette
+    v = Image.new("L", (630, 500), 0)
+    ImageDraw.Draw(v).ellipse((-120, -80, 750, 580), fill=255)
+    v = v.filter(ImageFilter.GaussianBlur(70))
+    black = Image.new("RGBA", (630, 500), (0, 0, 0, 255))
+    black.putalpha(Image.eval(v, lambda p: 255 - p))
+    cover.alpha_composite(black)
+
+    t = torch(8, 5).resize((200, 400), Image.NEAREST)
+    cover.alpha_composite(t, (215, 88))
+
+    def centered(img, y):
+        cover.alpha_composite(img, ((630 - img.width) // 2, y))
+    def outlined(txt, size, rgb, y):
+        main_t = lettering(font, txt, size, rgb)
+        dark = lettering(font, txt, size, (0, 0, 0))
+        x = (630 - main_t.width) // 2
+        for dx, dy in ((-3, 0), (3, 0), (0, -3), (0, 3), (3, 3), (-3, 3), (3, -3), (-3, -3), (5, 5)):
+            cover.alpha_composite(dark, (x + dx, y + dy))
+        cover.alpha_composite(main_t, (x, y))
+    outlined("TORCH PASSERS", 40, (255, 255, 255), 20)
+    outlined("of SPLORR!!", 24, ORANGE, 70)
+    outlined("Hand it on. Forget why.", 14, (255, 225, 170), 462)
     os.makedirs("assets", exist_ok=True)
     cover.convert("RGB").save("assets/cover.png")
     print("assets/cover.png", cover.size)
