@@ -10,6 +10,8 @@ A dynasty, one torch, and the few things that survive being handed down.
 
 ## Paste this as the page description
 
+**Latest version:** https://playdeezgames.github.io/tggd-aij5/
+
 You have a torch. It does not stay yours.
 
 Eight generations carry it. In each one, three things happen to you: a goat eats the map, a stranger offers to hold your torch, the mayor wants a permit to be on fire. You decide what to do about each, then you choose an heir and the torch moves on.
