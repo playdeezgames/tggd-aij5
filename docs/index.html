@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Torch Passers of SPLORR!!</title>
+<style>
+	html, body { margin: 0; background: #000; color: #ddd; font-family: monospace; font-size: 18px; }
+	main { max-width: 40rem; margin: 0 auto; padding: 1rem; }
+	canvas { image-rendering: pixelated; }
+	#scene { display: block; width: 320px; height: 160px; margin: 0 auto 0.75rem; }
+	p { margin: 0 0 0.75rem; }
+	p:first-child { color: #fa0; }
+	button.choice { display: flex; align-items: center; gap: 0.75rem; width: 100%; margin: 0 0 0.5rem; padding: 0.6rem; text-align: left;
+		font: inherit; color: #ddd; background: #222; border: 1px solid #555; cursor: pointer; }
+	button.choice:hover, button.choice:focus { background: #333; border-color: #fa0; outline: none; }
+	.face { width: 36px; height: 36px; flex: none; }
+	footer { max-width: 40rem; margin: 0 auto; padding: 0 1rem 2rem; color: #888; font-size: 13px; }
+	footer a { color: #aaa; }
+	#mute { position: fixed; right: 8px; bottom: 8px; font: inherit; font-size: 13px; color: #aaa; background: #111; border: 1px solid #444; padding: 4px 8px; cursor: pointer; }
+</style>
+</head>
+<body>
+<main>
+	<canvas id="scene" width="160" height="80"></canvas>
+	<div id="view">Loading...</div>
+</main>
+<footer>
+	Tiles: <a href="https://vurmux.itch.io/urizen-onebit-tileset">Urizen 1-bit tileset</a> by vurmux (CC0).
+	Sound effects made with <a href="https://sfxr.me">jsfxr</a>. Built with AI assistance (Claude).
+</footer>
+<button id="mute" type="button">Sound: on</button>
+<script type="text/javascript" src="odin.js"></script>
+<script type="text/javascript">
+	const memory = new odin.WasmMemoryInterface();
+	const view = document.getElementById("view");
+	let choices = 0;
+
+	// ---- tiles: Urizen is 12 px tiles with a 1 px gap and a 1 px offset; black is opaque, which suits the black page.
+	const sheet = new Image();
+	let sheetReady = false;
+	const pendingFaces = []; // [canvas, col, row] waiting for the sheet to load
+	function drawTile(ctx, col, row, x, y, scale) {
+		ctx.imageSmoothingEnabled = false;
+		ctx.drawImage(sheet, 13 * col + 1, 13 * row + 1, 12, 12, x, y, 12 * scale, 12 * scale);
+	}
+	function drawFace(canvas, col, row) {
+		drawTile(canvas.getContext("2d"), col, row, 0, 0, 3);
+	}
+	sheet.onload = () => {
+		sheetReady = true;
+		for (const [canvas, col, row] of pendingFaces) drawFace(canvas, col, row);
+		pendingFaces.length = 0;
+	};
+	sheet.src = "assets/urizen.png";
+
+	// ---- scene: the ruler's face and a procedural torch whose flame follows the flame level and flickers.
+	const sceneCanvas = document.getElementById("scene");
+	const sceneCtx = sceneCanvas.getContext("2d");
+	const scene = { torch: -1, col: -1, row: -1 };
+	function noise(n) { const s = Math.sin(n * 12.9898) * 43758.5453; return s - Math.floor(s); } // 0..1, no state
+	function drawTorch(ctx, level, t, cx) {
+		const baseY = 52;
+		ctx.fillStyle = "#6b4423"; // stick
+		ctx.fillRect(cx - 2, baseY, 4, 26);
+		ctx.fillStyle = "#3a2410";
+		ctx.fillRect(cx - 3, baseY - 2, 6, 3);
+		if (level <= 0) { // out: a thread of smoke
+			ctx.fillStyle = "#555";
+			for (let i = 0; i < 5; i++) ctx.fillRect(cx - 1 + Math.round(Math.sin(t / 400 + i) * 2), baseY - 4 - i * 4, 2, 2);
+			return;
+		}
+		const h = 6 + level * 4;           // flame height in logical pixels (at most 42, above the stick)
+		const w = 4 + Math.round(level / 2);
+		for (let x = -w; x <= w; x++) {
+			const shape = 1 - (Math.abs(x) / (w + 1)) ** 1.6;                  // tall in the middle
+			const wob = noise(Math.floor(t / 90) * 7 + x * 3.1) * 0.35 + 0.65;  // flicker, re-rolled ~11 times a second
+			const colH = Math.max(1, Math.round(h * shape * wob));
+			ctx.fillStyle = "#e8601a";
+			ctx.fillRect(cx + x, baseY - colH, 1, colH);
+			const inner = Math.round(colH * 0.6);
+			if (Math.abs(x) <= w / 2 && inner > 1) { ctx.fillStyle = "#ffcc33"; ctx.fillRect(cx + x, baseY - inner, 1, inner); }
+		}
+	}
+	function drawScene(t) {
+		sceneCtx.clearRect(0, 0, 160, 80);
+		const hasFace = scene.col >= 0;
+		if (hasFace && sheetReady) drawTile(sceneCtx, scene.col, scene.row, 14, 16, 4);
+		if (scene.torch >= 0) drawTorch(sceneCtx, scene.torch, t, hasFace ? 108 : 80); // centred when alone
+		requestAnimationFrame(drawScene);
+	}
+	requestAnimationFrame(drawScene);
+
+	// ---- sound: decoded once after the first key or click (browsers keep audio off until then); one fresh source per effect.
+	const SOUND_FILES = ["click", "flame_up", "flame_down", "handoff", "flame_low", "ending"];
+	let actx = null, buffers = [], muted = false;
+	const queued = []; // ids asked for before decoding finished
+	try { muted = localStorage.getItem("ptt-muted") === "1"; } catch (e) {}
+	const muteButton = document.getElementById("mute");
+	function showMute() { muteButton.textContent = "Sound: " + (muted ? "off" : "on"); }
+	showMute();
+	muteButton.addEventListener("click", () => {
+		muted = !muted;
+		showMute();
+		try { localStorage.setItem("ptt-muted", muted ? "1" : "0"); } catch (e) {}
+		muteButton.blur(); // keep the number keys for the game
+	});
+	async function unlock() {
+		if (actx) return;
+		try {
+			actx = new (window.AudioContext || window.webkitAudioContext)();
+			await actx.resume();
+			await Promise.all(SOUND_FILES.map(async (name, i) => {
+				try {
+					const data = await (await fetch("assets/sfx/" + name + ".wav")).arrayBuffer();
+					buffers[i] = await actx.decodeAudioData(data);
+				} catch (e) { console.warn("sound", name, "failed:", e); }
+			}));
+			for (const id of queued.splice(0)) play(id);
+		} catch (e) { actx = null; console.warn("no Web Audio:", e); }
+	}
+	function play(id) {
+		const buf = buffers[id];
+		if (muted || !actx || !buf) return;
+		const src = actx.createBufferSource();
+		src.buffer = buf;
+		src.connect(actx.destination);
+		src.start();
+	}
+	for (const ev of ["keydown", "pointerdown", "touchstart"]) window.addEventListener(ev, unlock, { capture: true, once: false });
+
+	const imports = {
+		env: {
+			dom_clear: () => { view.replaceChildren(); choices = 0; },
+			dom_scene: (torch, col, row) => { scene.torch = torch; scene.col = col; scene.row = row; },
+			dom_line: (ptr, len) => {
+				const p = document.createElement("p");
+				p.textContent = memory.loadString(ptr, len);
+				view.appendChild(p);
+			},
+			dom_choice: (ptr, len, col, row) => {
+				const index = choices++;
+				const b = document.createElement("button");
+				b.className = "choice";
+				if (col >= 0) {
+					const face = document.createElement("canvas");
+					face.className = "face";
+					face.width = 36; face.height = 36;
+					if (sheetReady) drawFace(face, col, row); else pendingFaces.push([face, col, row]);
+					b.appendChild(face);
+				}
+				const label = document.createElement("span");
+				label.textContent = (index + 1) + ". " + memory.loadString(ptr, len);
+				b.appendChild(label);
+				b.addEventListener("click", () => memory.exports.on_choice(index));
+				view.appendChild(b);
+				if (index === 0) b.focus();
+			},
+			play_sound: (id) => { if (actx && buffers[id]) play(id); else if (!muted && queued.length < 4) queued.push(id); },
+			// QA only: ?seed=N makes the game's randomness repeatable.
+			now_ms: () => { const s = new URLSearchParams(location.search).get("seed"); return s !== null ? Number(s) : Date.now(); },
+			// localStorage can be missing or throw (private windows, blocked site data): the game still plays.
+			storage_get: (kp, kl, bp, cap) => {
+				try {
+					const v = localStorage.getItem(memory.loadString(kp, kl));
+					if (v === null) return -1;
+					const bytes = new TextEncoder().encode(v);
+					if (bytes.length > cap) return -1;
+					new Uint8Array(memory.memory.buffer, bp, bytes.length).set(bytes);
+					return bytes.length;
+				} catch (e) { return -1; }
+			},
+			storage_set: (kp, kl, vp, vl) => {
+				try { localStorage.setItem(memory.loadString(kp, kl), memory.loadString(vp, vl)); } catch (e) {}
+			},
+			storage_remove: (kp, kl) => {
+				try { localStorage.removeItem(memory.loadString(kp, kl)); } catch (e) {}
+			},
+		},
+	};
+	// Number keys pick a choice, so the game plays from the keyboard.
+	window.addEventListener("keydown", (e) => {
+		const n = parseInt(e.key, 10);
+		if (n >= 1 && n <= choices) { e.preventDefault(); memory.exports.on_choice(n - 1); }
+	});
+	odin.runWasm("game.wasm", null, imports, memory).then(() => {
+		// QA only: ?keys=1,1,2 plays those choices (1-based) after load. Used to reproduce screens for the screenshots.
+		const keys = new URLSearchParams(location.search).get("keys");
+		if (keys) for (const k of keys.split(",")) memory.exports.on_choice(parseInt(k, 10) - 1);
+	});
+</script>
+</body>
+</html>
